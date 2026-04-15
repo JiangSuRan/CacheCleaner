@@ -4,15 +4,32 @@ namespace CacheCleaner;
 
 public class MainForm : Form
 {
-    private DataGridView dgv;
-    private Button btnScan;
-    private Button btnClean;
-    private Button btnSelectAll;
-    private Button btnSelectNone;
-    private ProgressBar progressBar;
-    private Label lblStatus;
-    private Label lblTotal;
-    private long totalFreed;
+    // 缓存的字体对象（避免 CellFormatting 中反复创建导致 GDI 泄漏）
+    private static readonly Font FontTitle = new("微软雅黑", 16, FontStyle.Bold);
+    private static readonly Font FontNormal = new("微软雅黑", 9.5F);
+    private static readonly Font FontNormalBold = new("微软雅黑", 9.5F, FontStyle.Bold);
+    private static readonly Font FontSmall = new("微软雅黑", 9F);
+    private static readonly Font FontSmallBold = new("微软雅黑", 9F, FontStyle.Bold);
+
+    // 常用颜色常量（替代散落各处的魔术数字）
+    private static readonly Color AccentBlue = Color.FromArgb(0, 120, 215);
+    private static readonly Color DangerRed = Color.FromArgb(220, 53, 69);
+    private static readonly Color SuccessGreen = Color.FromArgb(40, 167, 69);
+    private static readonly Color WarnYellow = Color.FromArgb(255, 193, 7);
+    private static readonly Color GrayLight = Color.FromArgb(240, 240, 240);
+    private static readonly Color GrayLighter = Color.FromArgb(248, 248, 248);
+    private static readonly Color GrayText = Color.FromArgb(60, 60, 60);
+    private static readonly Color GrayButton = Color.FromArgb(108, 117, 125);
+
+    private DataGridView dgv = null!;
+    private Button btnScan = null!;
+    private Button btnClean = null!;
+    private Button btnSelectAll = null!;
+    private Button btnSelectNone = null!;
+    private ProgressBar progressBar = null!;
+    private Label lblStatus = null!;
+    private Label lblTotal = null!;
+    private CancellationTokenSource? _cts;
 
     public MainForm()
     {
@@ -38,13 +55,13 @@ public class MainForm : Form
         {
             Dock = DockStyle.Top,
             Height = 60,
-            BackColor = Color.FromArgb(0, 120, 215)
+            BackColor = AccentBlue
         };
         var titleLabel = new Label
         {
             Text = "  C盘缓存清理工具",
             ForeColor = Color.White,
-            Font = new Font("微软雅黑", 16, FontStyle.Bold),
+            Font = FontTitle,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
         };
@@ -59,24 +76,24 @@ public class MainForm : Form
             Padding = new Padding(15, 10, 15, 5)
         };
 
-        btnScan = CreateButton("扫描缓存", Color.FromArgb(0, 120, 215), Color.White);
+        btnScan = CreateButton("扫描缓存", AccentBlue, Color.White);
         btnScan.Location = new Point(15, 10);
         btnScan.Size = new Size(120, 35);
         btnScan.Click += BtnScan_Click;
 
-        btnClean = CreateButton("清理选中", Color.FromArgb(220, 53, 69), Color.White);
+        btnClean = CreateButton("清理选中", DangerRed, Color.White);
         btnClean.Location = new Point(150, 10);
         btnClean.Size = new Size(120, 35);
         btnClean.Enabled = false;
         btnClean.Click += BtnClean_Click;
 
-        btnSelectAll = CreateButton("全选", Color.FromArgb(108, 117, 125), Color.White);
+        btnSelectAll = CreateButton("全选", GrayButton, Color.White);
         btnSelectAll.Location = new Point(290, 10);
         btnSelectAll.Size = new Size(80, 35);
         btnSelectAll.Enabled = false;
         btnSelectAll.Click += (_, _) => SetAllChecked(true);
 
-        btnSelectNone = CreateButton("取消全选", Color.FromArgb(108, 117, 125), Color.White);
+        btnSelectNone = CreateButton("取消全选", GrayButton, Color.White);
         btnSelectNone.Location = new Point(385, 10);
         btnSelectNone.Size = new Size(90, 35);
         btnSelectNone.Enabled = false;
@@ -100,21 +117,21 @@ public class MainForm : Form
         {
             Dock = DockStyle.Bottom,
             Height = 35,
-            BackColor = Color.FromArgb(240, 240, 240)
+            BackColor = GrayLight
         };
         lblStatus = new Label
         {
             Text = "  就绪。点击「扫描缓存」开始。",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("微软雅黑", 9F)
+            Font = FontSmall
         };
         lblTotal = new Label
         {
             Text = "",
             Dock = DockStyle.Right,
             TextAlign = ContentAlignment.MiddleRight,
-            Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+            Font = FontSmallBold,
             Size = new Size(200, 35)
         };
         statusPanel.Controls.AddRange([lblStatus, lblTotal]);
@@ -137,24 +154,19 @@ public class MainForm : Form
             MultiSelect = false,
             ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single,
             GridColor = Color.FromArgb(230, 230, 230),
-            Font = new Font("微软雅黑", 9.5F),
-            Padding = new Padding(0)
+            Font = FontNormal
         };
 
-        // 列头样式
-        dgv.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
-        dgv.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(60, 60, 60);
-        dgv.ColumnHeadersDefaultCellStyle.Font = new Font("微软雅黑", 9.5F, FontStyle.Bold);
+        dgv.ColumnHeadersDefaultCellStyle.BackColor = GrayLight;
+        dgv.ColumnHeadersDefaultCellStyle.ForeColor = GrayText;
+        dgv.ColumnHeadersDefaultCellStyle.Font = FontNormalBold;
         dgv.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        dgv.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(240, 240, 240);
-        dgv.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.FromArgb(60, 60, 60);
+        dgv.ColumnHeadersDefaultCellStyle.SelectionBackColor = GrayLight;
+        dgv.ColumnHeadersDefaultCellStyle.SelectionForeColor = GrayText;
         dgv.ColumnHeadersHeight = 36;
         dgv.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
 
-        // 交替行颜色
-        dgv.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 248, 248);
-
-        // 行高
+        dgv.AlternatingRowsDefaultCellStyle.BackColor = GrayLighter;
         dgv.RowTemplate.Height = 32;
 
         // 列定义
@@ -215,7 +227,6 @@ public class MainForm : Form
         dgv.CellFormatting += Dgv_CellFormatting;
 
         Controls.Add(dgv);
-        // 把 dgv 移到最底层，让 Dock.Fill 生效
         Controls.SetChildIndex(dgv, 0);
     }
 
@@ -227,15 +238,23 @@ public class MainForm : Form
             BackColor = backColor,
             ForeColor = foreColor,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("微软雅黑", 9.5F),
+            Font = FontNormal,
             Cursor = Cursors.Hand,
             TextAlign = ContentAlignment.MiddleCenter
         };
     }
 
     /// <summary>
-    /// 勾选框点击处理
+    /// 统一设置操作按钮的启用状态（替代 4 处重复的按钮切换代码）
     /// </summary>
+    private void SetControlsEnabled(bool enabled)
+    {
+        btnScan.Enabled = enabled;
+        btnClean.Enabled = enabled;
+        btnSelectAll.Enabled = enabled;
+        btnSelectNone.Enabled = enabled;
+    }
+
     private void Dgv_CellContentClick(object? sender, DataGridViewCellEventArgs e)
     {
         if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name == "Checked")
@@ -245,131 +264,120 @@ public class MainForm : Form
         }
     }
 
-    /// <summary>
-    /// 格式化单元格显示
-    /// </summary>
     private void Dgv_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
         if (e.RowIndex < 0) return;
 
-        // 大小列格式化
         if (dgv.Columns[e.ColumnIndex].Name == "Size" && e.Value is long size)
         {
             e.Value = CacheScanner.FormatSize(size);
             e.FormattingApplied = true;
         }
 
-        // 风险列颜色
-        if (dgv.Columns[e.ColumnIndex].Name == "Risk" && e.Value is string risk)
+        if (dgv.Columns[e.ColumnIndex].Name == "Risk" && e.Value is RiskLevel risk)
         {
             e.Value = risk switch
             {
-                "safe" => "安全",
-                "warn" => "注意",
-                "danger" => "危险",
-                _ => risk
+                RiskLevel.Safe => "安全",
+                RiskLevel.Warn => "注意",
+                RiskLevel.Danger => "危险",
+                _ => risk.ToString()
             };
             e.FormattingApplied = true;
             e.CellStyle!.ForeColor = risk switch
             {
-                "safe" => Color.FromArgb(40, 167, 69),
-                "warn" => Color.FromArgb(255, 193, 7),
-                "danger" => Color.FromArgb(220, 53, 69),
+                RiskLevel.Safe => SuccessGreen,
+                RiskLevel.Warn => WarnYellow,
+                RiskLevel.Danger => DangerRed,
                 _ => Color.Black
             };
-            e.CellStyle.Font = new Font("微软雅黑", 9.5F, FontStyle.Bold);
+            e.CellStyle.Font = FontNormalBold; // 使用缓存的字体，不再每次 new
         }
 
-        // 项目名称列：不存在的项显示灰色
         if (dgv.Columns[e.ColumnIndex].Name == "Name")
         {
             var pathVal = dgv.Rows[e.RowIndex].Cells["Path"].Value?.ToString();
             if (string.IsNullOrEmpty(pathVal))
-            {
                 e.CellStyle!.ForeColor = Color.Gray;
-            }
         }
     }
 
     /// <summary>
-    /// 扫描按钮点击
+    /// 扫描按钮点击（async/await 替代原始 Thread，Progress 在 UI 线程创建）
     /// </summary>
-    private void BtnScan_Click(object? sender, EventArgs e)
+    private async void BtnScan_Click(object? sender, EventArgs e)
     {
-        btnScan.Enabled = false;
-        btnClean.Enabled = false;
-        btnSelectAll.Enabled = false;
-        btnSelectNone.Enabled = false;
+        SetControlsEnabled(false);
         progressBar.Visible = true;
         lblStatus.Text = "  正在扫描缓存，请稍候...";
-
         dgv.Rows.Clear();
 
-        var worker = new Thread(() =>
+        _cts = new CancellationTokenSource();
+        // Progress 必须在 UI 线程创建，确保回调正确封送到 UI 线程
+        var progress = new Progress<(int current, int total, string name)>(p =>
         {
-            var progress = new Progress<(int current, int total, string name)>(p =>
-            {
-                progressBar.Value = 0;
-                progressBar.Maximum = p.total;
-                progressBar.Value = Math.Min(p.current, p.total);
-                lblStatus.Text = $"  正在扫描: {p.name} ({p.current}/{p.total})";
-            });
+            progressBar.Maximum = p.total;
+            progressBar.Value = Math.Min(p.current, p.total);
+            lblStatus.Text = $"  正在扫描: {p.name} ({p.current}/{p.total})";
+        });
 
-            var items = CacheScanner.ScanAll((IProgress<(int, int, string)>)progress);
-
-            this.BeginInvoke(() =>
-            {
-                foreach (var item in items)
-                {
-                    if (!item.Exists) continue; // 只显示存在的缓存
-                    int rowIdx = dgv.Rows.Add(
-                        item.Checked,
-                        item.Name,
-                        item.SizeBytes,
-                        item.Desc,
-                        item.Risk,
-                        item.Path
-                    );
-
-                    // 安全项默认勾选，警告/危险项不勾选
-                    if (item.Risk == "safe")
-                    {
-                        dgv.Rows[rowIdx].Cells["Checked"].Value = true;
-                    }
-                }
-
-                progressBar.Visible = false;
-                btnScan.Enabled = true;
-                btnClean.Enabled = true;
-                btnSelectAll.Enabled = true;
-                btnSelectNone.Enabled = true;
-                lblStatus.Text = $"  扫描完成，共发现 {dgv.Rows.Count} 个缓存项目。";
-                UpdateTotalSize();
-            });
-        })
+        try
         {
-            IsBackground = true
-        };
-        worker.Start();
+            var items = await Task.Run(() => CacheScanner.ScanAll(progress, _cts.Token));
+
+            foreach (var item in items)
+            {
+                if (!item.Exists) continue;
+                int rowIdx = dgv.Rows.Add(
+                    item.Checked,
+                    item.Name,
+                    item.SizeBytes,
+                    item.Desc,
+                    item.Risk,
+                    item.Path
+                );
+
+                if (item.Risk == RiskLevel.Safe)
+                    dgv.Rows[rowIdx].Cells["Checked"].Value = true;
+            }
+
+            lblStatus.Text = $"  扫描完成，共发现 {dgv.Rows.Count} 个缓存项目。";
+            UpdateTotalSize();
+        }
+        catch (OperationCanceledException)
+        {
+            lblStatus.Text = "  扫描已取消。";
+        }
+        catch (Exception ex)
+        {
+            lblStatus.Text = $"  扫描出错: {ex.Message}";
+            Debug.WriteLine($"扫描异常: {ex}");
+        }
+        finally
+        {
+            progressBar.Visible = false;
+            SetControlsEnabled(true);
+            _cts.Dispose();
+            _cts = null;
+        }
     }
 
     /// <summary>
-    /// 清理按钮点击
+    /// 清理按钮点击（逐项 await，自然回到 UI 线程更新，无需 BeginInvoke）
     /// </summary>
-    private void BtnClean_Click(object? sender, EventArgs e)
+    private async void BtnClean_Click(object? sender, EventArgs e)
     {
         // 收集选中项
-        var selectedItems = new List<(int rowIndex, string name, string path, string risk)>();
+        var selectedItems = new List<(int rowIndex, string name, string path, RiskLevel risk)>();
         for (int i = 0; i < dgv.Rows.Count; i++)
         {
             if (dgv.Rows[i].Cells["Checked"].Value is true)
             {
-                string risk = dgv.Rows[i].Cells["Risk"].Value?.ToString() ?? "safe";
                 selectedItems.Add((
                     i,
                     dgv.Rows[i].Cells["Name"].Value?.ToString() ?? "",
                     dgv.Rows[i].Cells["Path"].Value?.ToString() ?? "",
-                    risk
+                    dgv.Rows[i].Cells["Risk"].Value is RiskLevel r ? r : RiskLevel.Safe
                 ));
             }
         }
@@ -380,19 +388,15 @@ public class MainForm : Form
             return;
         }
 
-        // 检查是否有危险项
-        var dangerItems = selectedItems.Where(x => x.risk == "danger").ToList();
-        var warnItems = selectedItems.Where(x => x.risk == "warn").ToList();
+        // 构建警告信息
+        var dangerItems = selectedItems.Where(x => x.risk == RiskLevel.Danger).ToList();
+        var warnItems = selectedItems.Where(x => x.risk == RiskLevel.Warn).ToList();
 
         string warning = "";
         if (dangerItems.Count > 0)
-        {
             warning += $"\n\n危险项目:\n{string.Join("\n", dangerItems.Select(x => $"  - {x.name}"))}\n这些操作可能导致数据丢失！";
-        }
         if (warnItems.Count > 0)
-        {
             warning += $"\n\n注意项目:\n{string.Join("\n", warnItems.Select(x => $"  - {x.name}"))}\n请确保相关程序已关闭。";
-        }
 
         var result = MessageBox.Show(
             $"确认清理 {selectedItems.Count} 个项目？{warning}",
@@ -403,115 +407,111 @@ public class MainForm : Form
 
         if (result != DialogResult.OK) return;
 
-        // 开始清理
-        btnClean.Enabled = false;
-        btnScan.Enabled = false;
-        btnSelectAll.Enabled = false;
-        btnSelectNone.Enabled = false;
+        SetControlsEnabled(false);
         progressBar.Visible = true;
-        totalFreed = 0;
 
-        var worker = new Thread(() =>
+        _cts = new CancellationTokenSource();
+        var progress = new Progress<string>(msg => lblStatus.Text = $"  {msg}");
+        long totalFreed = 0;
+
+        try
         {
-            long totalFreedLocal = 0;
-
             for (int i = 0; i < selectedItems.Count; i++)
             {
+                _cts.Token.ThrowIfCancellationRequested();
                 var (rowIdx, name, path, _) = selectedItems[i];
 
-                this.BeginInvoke(() =>
-                {
-                    lblStatus.Text = $"  正在清理: {name} ({i + 1}/{selectedItems.Count})";
-                    progressBar.Value = 0;
-                    progressBar.Maximum = selectedItems.Count;
-                    progressBar.Value = Math.Min(i + 1, selectedItems.Count);
+                // 更新进度（已在 UI 线程，直接操作控件）
+                lblStatus.Text = $"  正在清理: {name} ({i + 1}/{selectedItems.Count})";
+                progressBar.Maximum = selectedItems.Count;
+                progressBar.Value = i + 1;
+                dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(255, 243, 205);
 
-                    // 高亮当前行
-                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(255, 243, 205);
-                });
-
+                // 在后台线程执行清理
                 var item = new CacheItem { Name = name, Path = path, Exists = true };
-                var cleanProgress = new Progress<string>(msg =>
-                {
-                    this.BeginInvoke(() => lblStatus.Text = $"  {msg}");
-                });
-                long freed = CacheScanner.CleanItem(item, (IProgress<string>)cleanProgress);
-                totalFreedLocal += freed;
+                long itemFreed = await Task.Run(() => CacheScanner.CleanItem(item, progress, _cts.Token));
+                totalFreed += itemFreed;
 
-                // 更新行显示
-                this.BeginInvoke(() =>
+                // await 后自动回到 UI 线程，直接更新控件
+                if (itemFreed > 0)
                 {
-                    if (freed > 0)
-                    {
-                        dgv.Rows[rowIdx].Cells["Size"].Value = item.SizeBytes;
-                        dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(212, 237, 218);
-                    }
-                    else
-                    {
-                        dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(248, 248, 248);
-                    }
-                });
+                    dgv.Rows[rowIdx].Cells["Size"].Value = item.SizeBytes;
+                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(212, 237, 218);
+                }
+                else
+                {
+                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = GrayLighter;
+                }
             }
 
-            // 完成
-            this.BeginInvoke(() =>
-            {
-                totalFreed = totalFreedLocal;
-                progressBar.Visible = false;
-                btnScan.Enabled = true;
-                btnClean.Enabled = true;
-                btnSelectAll.Enabled = true;
-                btnSelectNone.Enabled = true;
+            string freedStr = CacheScanner.FormatSize(totalFreed);
+            lblStatus.Text = $"  清理完成！共释放 {freedStr}。";
+            lblTotal.Text = $"释放: {freedStr}  ";
+            lblTotal.ForeColor = SuccessGreen;
 
-                string freedStr = CacheScanner.FormatSize(totalFreed);
-                lblStatus.Text = $"  清理完成！共释放 {freedStr}。";
-                lblTotal.Text = $"释放: {freedStr}  ";
-                lblTotal.ForeColor = Color.FromArgb(40, 167, 69);
+            MessageBox.Show(
+                $"清理完成！\n\n共释放: {freedStr}",
+                "清理完成",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
 
-                MessageBox.Show(
-                    $"清理完成！\n\n共释放: {freedStr}",
-                    "清理完成",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information
-                );
-
-                // 自动重新扫描
-                BtnScan_Click(null, EventArgs.Empty);
-            });
-        })
+            // 自动重新扫描
+            BtnScan_Click(null, EventArgs.Empty);
+        }
+        catch (OperationCanceledException)
         {
-            IsBackground = true
-        };
-        worker.Start();
+            lblStatus.Text = "  清理已取消。";
+        }
+        catch (Exception ex)
+        {
+            lblStatus.Text = $"  清理出错: {ex.Message}";
+            Debug.WriteLine($"清理异常: {ex}");
+        }
+        finally
+        {
+            progressBar.Visible = false;
+            SetControlsEnabled(true);
+            _cts?.Dispose();
+            _cts = null;
+        }
     }
 
-    /// <summary>
-    /// 更新选中项总大小
-    /// </summary>
     private void UpdateTotalSize()
     {
         long total = 0;
         for (int i = 0; i < dgv.Rows.Count; i++)
         {
             if (dgv.Rows[i].Cells["Checked"].Value is true)
-            {
                 total += dgv.Rows[i].Cells["Size"].Value as long? ?? 0;
-            }
         }
         lblTotal.Text = $"选中: {CacheScanner.FormatSize(total)}  ";
-        lblTotal.ForeColor = total > 0 ? Color.FromArgb(0, 120, 215) : Color.Gray;
+        lblTotal.ForeColor = total > 0 ? AccentBlue : Color.Gray;
     }
 
-    /// <summary>
-    /// 全选/取消全选
-    /// </summary>
     private void SetAllChecked(bool check)
     {
-        for (int i = 0; i < dgv.Rows.Count; i++)
+        dgv.SuspendLayout();
+        try
         {
-            dgv.Rows[i].Cells["Checked"].Value = check;
+            for (int i = 0; i < dgv.Rows.Count; i++)
+                dgv.Rows[i].Cells["Checked"].Value = check;
+        }
+        finally
+        {
+            dgv.ResumeLayout();
         }
         dgv.EndEdit();
         UpdateTotalSize();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _cts?.Cancel();
+            _cts?.Dispose();
+        }
+        base.Dispose(disposing);
     }
 }
