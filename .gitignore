@@ -1,0 +1,15 @@
+## 构建产物 — 不上传到 GitHub
+bin/
+obj/
+publish/
+
+## VS Code / IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+## 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store
