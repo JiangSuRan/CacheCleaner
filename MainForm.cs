@@ -26,6 +26,7 @@ public class MainForm : Form
     private Button btnClean = null!;
     private Button btnSelectAll = null!;
     private Button btnSelectNone = null!;
+    private Button btnCancel = null!;
     private ProgressBar progressBar = null!;
     private Label lblStatus = null!;
     private Label lblTotal = null!;
@@ -39,7 +40,7 @@ public class MainForm : Form
 
     private void SetupForm()
     {
-        Text = "C盘缓存清理工具 v2.0";
+        Text = "C盘缓存清理工具 v3.0";
         Size = new Size(820, 600);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -99,7 +100,13 @@ public class MainForm : Form
         btnSelectNone.Enabled = false;
         btnSelectNone.Click += (_, _) => SetAllChecked(false);
 
-        buttonPanel.Controls.AddRange([btnScan, btnClean, btnSelectAll, btnSelectNone]);
+        btnCancel = CreateButton("取消扫描", Color.FromArgb(183, 28, 28), Color.White);
+        btnCancel.Location = new Point(490, 10);
+        btnCancel.Size = new Size(90, 35);
+        btnCancel.Visible = false;
+        btnCancel.Click += (_, _) => _cts?.Cancel();
+
+        buttonPanel.Controls.AddRange([btnScan, btnClean, btnSelectAll, btnSelectNone, btnCancel]);
         Controls.Add(buttonPanel);
 
         // 进度条
@@ -303,45 +310,58 @@ public class MainForm : Form
     }
 
     /// <summary>
-    /// 扫描按钮点击（async/await 替代原始 Thread，Progress 在 UI 线程创建）
+    /// 扫描按钮点击（两阶段：已知缓存 + 自动发现）
     /// </summary>
     private async void BtnScan_Click(object? sender, EventArgs e)
     {
         SetControlsEnabled(false);
+        btnCancel.Visible = true;
         progressBar.Visible = true;
-        lblStatus.Text = "  正在扫描缓存，请稍候...";
+        lblStatus.Text = "  正在扫描已知缓存...";
         dgv.Rows.Clear();
 
         _cts = new CancellationTokenSource();
-        // Progress 必须在 UI 线程创建，确保回调正确封送到 UI 线程
-        var progress = new Progress<(int current, int total, string name)>(p =>
+        var knownProgress = new Progress<(int current, int total, string name)>(p =>
         {
+            progressBar.Style = ProgressBarStyle.Continuous;
             progressBar.Maximum = p.total;
             progressBar.Value = Math.Min(p.current, p.total);
-            lblStatus.Text = $"  正在扫描: {p.name} ({p.current}/{p.total})";
+            lblStatus.Text = $"  扫描已知缓存: {p.name} ({p.current}/{p.total})";
         });
 
         try
         {
-            var items = await Task.Run(() => CacheScanner.ScanAll(progress, _cts.Token));
+            // Phase 1: 已知缓存（快速，1-2秒）
+            var knownItems = await Task.Run(() => CacheScanner.ScanAll(knownProgress, _cts.Token));
 
-            foreach (var item in items)
+            foreach (var item in knownItems)
             {
                 if (!item.Exists) continue;
-                int rowIdx = dgv.Rows.Add(
-                    item.Checked,
-                    item.Name,
-                    item.SizeBytes,
-                    item.Desc,
-                    item.Risk,
-                    item.Path
-                );
-
-                if (item.Risk == RiskLevel.Safe)
-                    dgv.Rows[rowIdx].Cells["Checked"].Value = true;
+                AddCacheRow(item, isKnown: true);
             }
 
-            lblStatus.Text = $"  扫描完成，共发现 {dgv.Rows.Count} 个缓存项目。";
+            UpdateTotalSize();
+            lblStatus.Text = $"  已知缓存扫描完成 ({dgv.Rows.Count} 项)，正在自动发现更多缓存...";
+
+            // Phase 2: 自动发现（较慢，10-30秒）
+            var autoProgress = new Progress<(int dirsScanned, string currentPath)>(p =>
+            {
+                progressBar.Style = ProgressBarStyle.Marquee;
+                lblStatus.Text = $"  自动发现: 已扫描 {p.dirsScanned} 个目录... ({p.currentPath})";
+            });
+
+            var autoItems = await Task.Run(() =>
+                CacheScanner.ScanAutoDiscovered(knownItems, autoProgress, _cts.Token));
+
+            int autoCount = 0;
+            foreach (var item in autoItems)
+            {
+                if (!item.Exists) continue;
+                AddCacheRow(item, isKnown: false);
+                autoCount++;
+            }
+
+            lblStatus.Text = $"  扫描完成: {dgv.Rows.Count} 个缓存项目 (其中 {autoCount} 个自动发现)。";
             UpdateTotalSize();
         }
         catch (OperationCanceledException)
@@ -355,11 +375,35 @@ public class MainForm : Form
         }
         finally
         {
+            progressBar.Style = ProgressBarStyle.Continuous;
             progressBar.Visible = false;
+            btnCancel.Visible = false;
             SetControlsEnabled(true);
-            _cts.Dispose();
+            _cts?.Dispose();
             _cts = null;
         }
+    }
+
+    /// <summary>
+    /// 添加缓存项到表格，自动发现项有视觉区分
+    /// </summary>
+    private void AddCacheRow(CacheItem item, bool isKnown)
+    {
+        string displayName = isKnown ? item.Name : $"[自动发现] {item.Name}";
+        int rowIdx = dgv.Rows.Add(
+            item.Checked,
+            displayName,
+            item.SizeBytes,
+            item.Desc,
+            item.Risk,
+            item.Path
+        );
+
+        if (!isKnown)
+            dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(235, 245, 255);
+
+        if (item.Risk == RiskLevel.Safe)
+            dgv.Rows[rowIdx].Cells["Checked"].Value = true;
     }
 
     /// <summary>

@@ -19,7 +19,8 @@ internal enum BaseFolder
 {
     LocalAppData,
     AppData,
-    Windows
+    Windows,
+    UserProfile
 }
 
 /// <summary>
@@ -54,12 +55,48 @@ public static class CacheScanner
 {
     private static readonly string[] SizeUnits = ["B", "KB", "MB", "GB", "TB"];
 
+    // 匹配缓存目录的名称（不区分大小写）
+    private static readonly HashSet<string> CacheDirNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "cache", "caches", "cached", "cache2",
+        "temp", "tmp",
+        "log", "logs",
+        "gpucache", "code cache",
+        "crashdumps", "minidump",
+        "blob_storage", "session storage"
+    };
+
+    // 跳过的根目录（不扫描系统目录）
+    private static readonly HashSet<string> SkipRoots = new(StringComparer.OrdinalIgnoreCase)
+    {
+        @"C:\Windows", @"C:\Program Files", @"C:\Program Files (x86)",
+        @"C:\ProgramData", @"C:\System Volume Information",
+        @"C:\$Recycle.Bin", @"C:\$Windows.~WS", @"C:\$Windows.~BT",
+        @"C:\Recovery", @"C:\Intel", @"C:\PerfLogs"
+    };
+
+    // 跳过的子目录名（大型非缓存目录）
+    private static readonly HashSet<string> SkipDirNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".git", ".svn", ".hg",
+        "node_modules", "venv", ".venv", "env", ".env",
+        "bin", "obj", "build", "dist", "target", "out",
+        "site-packages", "lib", ".vs", ".vscode", ".idea",
+        "packages", ".nuget"
+    };
+
+    // 最小报告阈值：50 MB
+    private const long MinReportSize = 50 * 1024 * 1024;
+    // 最大扫描深度
+    private const int MaxDepth = 8;
+
     // Conda 可能的安装路径
     private static readonly string[] CondaPkgsPaths =
     [
         @"C:\anaconda3\pkgs",
         @"C:\miniconda3\pkgs",
-        @"C:\Miniconda3\pkgs"
+        @"C:\Miniconda3\pkgs",
+        @"D:\conda\pkgs"
     ];
 
     // 合法的 pip 缓存路径特征
@@ -101,6 +138,40 @@ public static class CacheScanner
         ("Windows 临时文件", @"Temp", "Windows 临时文件（仅清理超过7天的）", RiskLevel.Warn, BaseFolder.LocalAppData),
         ("Windows 缩略图缓存", @"Microsoft\Windows\Explorer", "Windows 资源管理器缩略图缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
         ("Windows 预读取", @"Prefetch", "Windows 程序预读取缓存", RiskLevel.Safe, BaseFolder.Windows),
+
+        // AI 编辑器
+        ("Cursor 缓存", @"Cursor\Cache", "Cursor AI 编辑器缓存", RiskLevel.Safe, BaseFolder.AppData),
+        ("Cursor 日志", @"Cursor\logs", "Cursor AI 编辑器日志", RiskLevel.Safe, BaseFolder.AppData),
+        ("Trae CN 缓存", @"Trae CN\Cache", "字节跳动 Trae IDE 缓存", RiskLevel.Safe, BaseFolder.AppData),
+        ("Trae CN 日志", @"Trae CN\logs", "字节跳动 Trae IDE 日志", RiskLevel.Safe, BaseFolder.AppData),
+        ("Positron 缓存", @"Positron\Cache", "Positron R IDE 缓存", RiskLevel.Safe, BaseFolder.AppData),
+        ("Qoder 缓存", @"Qoder\Cache", "Qoder AI IDE 缓存", RiskLevel.Safe, BaseFolder.AppData),
+        ("CherryStudio 缓存", @"CherryStudio\Cache", "CherryStudio AI 客户端缓存", RiskLevel.Safe, BaseFolder.AppData),
+        ("Claude Desktop 缓存", @"Claude\Cache", "Claude Desktop 缓存", RiskLevel.Safe, BaseFolder.AppData),
+        ("Copilot 缓存", @"copilot", "GitHub Copilot 插件缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
+
+        // 视频/娱乐
+        ("bilibili 缓存", @"bilibili\Cache", "哔哩哔哩客户端缓存", RiskLevel.Safe, BaseFolder.AppData),
+        ("bilibili 日志", @"bilibili\logs", "哔哩哔哩客户端日志", RiskLevel.Safe, BaseFolder.AppData),
+
+        // 文档/翻译
+        ("Obsidian 缓存", @"obsidian\Cache", "Obsidian 笔记缓存", RiskLevel.Safe, BaseFolder.AppData),
+        ("百度翻译缓存", @"BdTranslateClient\Cache", "百度翻译客户端缓存", RiskLevel.Safe, BaseFolder.AppData),
+        ("doc2x 缓存", @"doc2x\Cache", "doc2x 文档转换缓存", RiskLevel.Safe, BaseFolder.AppData),
+
+        // 开发工具
+        ("NuGet 包缓存", @".nuget\packages", ".NET NuGet 包缓存", RiskLevel.Safe, BaseFolder.UserProfile),
+        ("NuGet HTTP 缓存", @"NuGet\v3-cache", "NuGet HTTP 缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
+        ("R 编译缓存", @"R\cache", "R 包编译缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
+        ("node-gyp 缓存", @"node-gyp\Cache", "Node.js 原生模块编译缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
+
+        // 系统缓存
+        ("D3D 着色器缓存", @"D3DSCache", "Direct3D 着色器缓存，清理后自动重建", RiskLevel.Safe, BaseFolder.LocalAppData),
+        ("崩溃转储", @"CrashDumps", "应用程序崩溃转储文件", RiskLevel.Safe, BaseFolder.LocalAppData),
+        ("PowerToys 更新缓存", @"Microsoft\PowerToys\Updates", "PowerToys 更新包", RiskLevel.Safe, BaseFolder.LocalAppData),
+        ("Electron 安装临时文件", @"SquirrelTemp", "Electron 应用安装临时文件", RiskLevel.Safe, BaseFolder.LocalAppData),
+        ("腾讯日志", @"Tencent\Logs", "腾讯软件日志文件", RiskLevel.Safe, BaseFolder.AppData),
+        ("GitHub Desktop 更新包", @"GitHubDesktop\packages", "GitHub Desktop 更新包缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
 
         // Docker（高风险）
         ("Docker 镜像/容器", @"Docker", "Docker Desktop 所有数据（镜像+容器+卷）", RiskLevel.Danger, BaseFolder.LocalAppData),
@@ -185,6 +256,12 @@ public static class CacheScanner
         // Conda pkgs 单独扫描
         ScanCondaPkgs(items, progress, ref current, ref total, cancellationToken);
 
+        // Electron 应用更新缓存
+        ScanUpdaterCaches(items, ctx, progress, ref current, ref total, cancellationToken);
+
+        // GitHub Desktop 旧版本
+        ScanGithubDesktopOldVersions(items, ctx, progress, ref current, ref total, cancellationToken);
+
         return items;
     }
 
@@ -201,6 +278,7 @@ public static class CacheScanner
                 Directory.Exists(Path.Combine(ctx.WindowsDir, relativePath))
                     ? Path.Combine(ctx.WindowsDir, relativePath)
                     : null,
+            BaseFolder.UserProfile => Path.Combine(ctx.UserProfile, relativePath),
             _ => null
         };
     }
@@ -328,6 +406,9 @@ public static class CacheScanner
             case "Windows 缩略图缓存":
                 freed = CleanFiles(item.Path, "thumbcache_*");
                 break;
+            case "GitHub Desktop 旧版本":
+                freed = CleanGithubDesktopOldVersions(item.Path, cancellationToken);
+                break;
             default:
                 freed = CleanDirectory(item.Path, cancellationToken);
                 break;
@@ -365,6 +446,9 @@ public static class CacheScanner
                 return true;
             // Conda 安装在 C:\ 根目录
             if (fullPath.Contains("conda", StringComparison.OrdinalIgnoreCase))
+                return true;
+            // 自动发现的多用户路径
+            if (fullPath.StartsWith(@"C:\Users\", StringComparison.OrdinalIgnoreCase))
                 return true;
 
             return false;
@@ -530,6 +614,295 @@ public static class CacheScanner
         }
 
         return freed;
+    }
+
+    /// <summary>
+    /// 扫描 Electron 应用更新缓存（*-updater 目录）
+    /// </summary>
+    private static void ScanUpdaterCaches(
+        List<CacheItem> items,
+        ScanContext ctx,
+        IProgress<(int current, int total, string name)>? progress,
+        ref int current,
+        ref int total,
+        CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(ctx.LocalAppData)) return;
+
+        try
+        {
+            var updaterDirs = Directory.GetDirectories(ctx.LocalAppData, "*-updater");
+            if (updaterDirs.Length == 0) return;
+
+            total += updaterDirs.Length;
+
+            foreach (var dir in updaterDirs)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                current++;
+                var displayName = Path.GetFileName(dir).Replace("-updater", "");
+                progress?.Report((current, total, displayName + " 更新缓存"));
+                items.Add(new CacheItem
+                {
+                    Name = $"{displayName} 更新缓存",
+                    Path = dir,
+                    Desc = "应用更新包缓存，清理后不影响使用",
+                    Risk = RiskLevel.Safe,
+                    Exists = true,
+                    SizeBytes = SumFiles(dir)
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"扫描更新缓存失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 扫描 GitHub Desktop 旧版本（仅保留最新版本）
+    /// </summary>
+    private static void ScanGithubDesktopOldVersions(
+        List<CacheItem> items,
+        ScanContext ctx,
+        IProgress<(int current, int total, string name)>? progress,
+        ref int current,
+        ref int total,
+        CancellationToken cancellationToken)
+    {
+        var ghDir = Path.Combine(ctx.LocalAppData, "GitHubDesktop");
+        if (!Directory.Exists(ghDir)) return;
+
+        try
+        {
+            var versions = Directory.GetDirectories(ghDir, "app-*")
+                .OrderByDescending(d => d)
+                .ToList();
+
+            if (versions.Count <= 1) return;
+
+            total++;
+            current++;
+            progress?.Report((current, total, "GitHub Desktop 旧版本"));
+
+            long totalSize = 0;
+            for (int i = 1; i < versions.Count; i++)
+                totalSize += SumFiles(versions[i]);
+
+            items.Add(new CacheItem
+            {
+                Name = "GitHub Desktop 旧版本",
+                Path = ghDir,
+                Desc = "GitHub Desktop 旧版本文件，清理后不影响当前版本",
+                Risk = RiskLevel.Safe,
+                Exists = true,
+                SizeBytes = totalSize
+            });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"扫描 GitHub Desktop 旧版本失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 清理 GitHub Desktop 旧版本（保留最新版本）
+    /// </summary>
+    private static long CleanGithubDesktopOldVersions(string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var versions = Directory.GetDirectories(path, "app-*")
+                .OrderByDescending(d => d)
+                .ToList();
+
+            if (versions.Count <= 1) return 0;
+
+            long freed = 0;
+            for (int i = 1; i < versions.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                freed += SumFiles(versions[i]);
+                try { Directory.Delete(versions[i], true); }
+                catch (Exception ex) { Debug.WriteLine($"删除旧版本失败 {versions[i]}: {ex.Message}"); }
+            }
+            return freed;
+        }
+        catch { return 0; }
+    }
+
+    /// <summary>
+    /// Phase 2：自动发现 C 盘用户目录中的缓存目录
+    /// </summary>
+    public static List<CacheItem> ScanAutoDiscovered(
+        List<CacheItem> knownItems,
+        IProgress<(int dirsScanned, string currentPath)>? progress = null,
+        CancellationToken ct = default)
+    {
+        var knownPaths = BuildKnownPathsSet(knownItems);
+        var results = new List<CacheItem>();
+        int dirsScanned = 0;
+
+        // 扫描 C:\Users 下所有用户目录
+        var usersDir = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) + "Users";
+        if (!Directory.Exists(usersDir)) return results;
+
+        var scanRoots = new List<string>();
+        try
+        {
+            foreach (var userDir in Directory.EnumerateDirectories(usersDir))
+            {
+                // 跳过 Public 等非用户目录的噪音
+                var name = Path.GetFileName(userDir);
+                if (name.Equals("Public", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("Default", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("Default User", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("All Users", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                scanRoots.Add(userDir);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"枚举用户目录失败: {ex.Message}");
+            return results;
+        }
+
+        foreach (var root in scanRoots)
+        {
+            ct.ThrowIfCancellationRequested();
+            WalkDirectory(root, 0, knownPaths, results, ref dirsScanned, progress, ct);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// 递归遍历目录树，匹配缓存模式
+    /// </summary>
+    private static void WalkDirectory(
+        string path,
+        int depth,
+        HashSet<string> knownPaths,
+        List<CacheItem> results,
+        ref int dirsScanned,
+        IProgress<(int dirsScanned, string currentPath)>? progress,
+        CancellationToken ct)
+    {
+        if (depth > MaxDepth) return;
+
+        string[] subDirs;
+        try
+        {
+            subDirs = Directory.GetDirectories(path);
+        }
+        catch (UnauthorizedAccessException) { return; }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"无法访问目录 {path}: {ex.Message}");
+            return;
+        }
+
+        foreach (var dir in subDirs)
+        {
+            ct.ThrowIfCancellationRequested();
+            dirsScanned++;
+
+            var dirName = Path.GetFileName(dir);
+
+            // 跳过黑名单目录
+            if (SkipDirNames.Contains(dirName)) continue;
+
+            // 匹配缓存模式
+            if (CacheDirNames.Contains(dirName))
+            {
+                // 去重：已知缓存路径不再报告
+                try
+                {
+                    var normalized = Path.GetFullPath(dir).TrimEnd('\\');
+                    if (knownPaths.Contains(normalized)) continue;
+                }
+                catch { continue; }
+
+                // 计算大小
+                long size = SumFiles(dir);
+                if (size < MinReportSize) continue;
+
+                // 路径安全校验
+                if (!IsPathSafeForCleaning(dir)) continue;
+
+                results.Add(new CacheItem
+                {
+                    Name = GenerateAutoName(dirName, dir),
+                    Path = dir,
+                    Desc = GenerateAutoDesc(dirName, dir),
+                    Risk = AssessAutoRisk(dir, dirName),
+                    Exists = true,
+                    SizeBytes = size
+                });
+
+                // 匹配到缓存目录后不继续递归
+                continue;
+            }
+
+            // 定期报告进度
+            if (dirsScanned % 50 == 0)
+                progress?.Report((dirsScanned, dir));
+
+            // 递归
+            WalkDirectory(dir, depth + 1, knownPaths, results, ref dirsScanned, progress, ct);
+        }
+    }
+
+    private static HashSet<string> BuildKnownPathsSet(List<CacheItem> knownItems)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in knownItems)
+        {
+            if (!string.IsNullOrEmpty(item.Path) && item.Exists)
+            {
+                try { set.Add(Path.GetFullPath(item.Path).TrimEnd('\\')); }
+                catch { }
+            }
+        }
+        return set;
+    }
+
+    private static string GenerateAutoName(string dirName, string fullPath)
+    {
+        var parentName = Path.GetFileName(Path.GetDirectoryName(fullPath)) ?? "未知应用";
+        var typeSuffix = dirName.ToLowerInvariant() switch
+        {
+            "cache" or "caches" or "cached" or "cache2" => "缓存",
+            "temp" or "tmp" => "临时文件",
+            "log" or "logs" => "日志",
+            "gpucache" => "GPU 缓存",
+            "code cache" => "代码缓存",
+            "crashdumps" or "minidump" => "崩溃转储",
+            _ => "缓存"
+        };
+        return $"{parentName} {typeSuffix}";
+    }
+
+    private static string GenerateAutoDesc(string dirName, string fullPath)
+    {
+        var parentName = Path.GetFileName(Path.GetDirectoryName(fullPath)) ?? "未知应用";
+        var lower = dirName.ToLowerInvariant();
+        if (lower is "temp" or "tmp")
+            return $"自动发现的 {parentName} 临时文件目录";
+        if (lower is "log" or "logs")
+            return $"自动发现的 {parentName} 日志文件";
+        return $"自动发现的 {parentName} 缓存目录";
+    }
+
+    private static RiskLevel AssessAutoRisk(string fullPath, string dirName)
+    {
+        var lower = fullPath.ToLowerInvariant();
+        if (lower.Contains(@"\docker\") || lower.Contains(@"\wsl\"))
+            return RiskLevel.Danger;
+        if (dirName is "temp" or "tmp")
+            return RiskLevel.Warn;
+        return RiskLevel.Safe;
     }
 
     /// <summary>
