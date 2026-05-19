@@ -1,9 +1,21 @@
 using System.Diagnostics;
+using System.Drawing.Imaging;
+using System.Reflection;
 
 namespace CacheCleaner;
 
 public class MainForm : Form
 {
+    // 主题背景图片
+    private static readonly Image? ThemeBg = LoadThemeImage();
+
+    private static Image? LoadThemeImage()
+    {
+        var stream = Assembly.GetExecutingAssembly()
+            .GetManifestResourceStream("CacheCleaner.theme_bg.png");
+        return stream != null ? Image.FromStream(stream) : null;
+    }
+
     // 缓存的字体对象（避免 CellFormatting 中反复创建导致 GDI 泄漏）
     private static readonly Font FontTitle = new("微软雅黑", 16, FontStyle.Bold);
     private static readonly Font FontNormal = new("微软雅黑", 9.5F);
@@ -11,17 +23,14 @@ public class MainForm : Form
     private static readonly Font FontSmall = new("微软雅黑", 9F);
     private static readonly Font FontSmallBold = new("微软雅黑", 9F, FontStyle.Bold);
 
-    // 常用颜色常量（替代散落各处的魔术数字）
+    // 常用颜色常量
     private static readonly Color AccentBlue = Color.FromArgb(0, 120, 215);
     private static readonly Color DangerRed = Color.FromArgb(220, 53, 69);
     private static readonly Color SuccessGreen = Color.FromArgb(40, 167, 69);
     private static readonly Color WarnYellow = Color.FromArgb(255, 193, 7);
-    private static readonly Color GrayLight = Color.FromArgb(240, 240, 240);
-    private static readonly Color GrayLighter = Color.FromArgb(248, 248, 248);
-    private static readonly Color GrayText = Color.FromArgb(60, 60, 60);
     private static readonly Color GrayButton = Color.FromArgb(108, 117, 125);
 
-    private DataGridView dgv = null!;
+    private AnimeDataGridView dgv = null!;
     private Button btnScan = null!;
     private Button btnClean = null!;
     private Button btnSelectAll = null!;
@@ -31,11 +40,36 @@ public class MainForm : Form
     private Label lblStatus = null!;
     private Label lblTotal = null!;
     private CancellationTokenSource? _cts;
+    private float _bgOpacity = 0.30f;
 
     public MainForm()
     {
         SetupForm();
         SetupControls();
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        DrawThemeBackground(e.Graphics, ClientRectangle);
+    }
+
+    /// <summary>
+    /// 绘制主题背景（窗体和 AnimeDataGridView 共用）
+    /// </summary>
+    private void DrawThemeBackground(Graphics g, Rectangle bounds)
+    {
+        // 半透明淡蓝底色
+        using var baseBrush = new SolidBrush(Color.FromArgb(220, 230, 240, 250));
+        g.FillRectangle(baseBrush, bounds);
+
+        if (ThemeBg == null) return;
+
+        using var attrs = new ImageAttributes();
+        attrs.SetColorMatrix(new ColorMatrix { Matrix33 = _bgOpacity });
+        g.DrawImage(ThemeBg,
+            new Rectangle(0, 0, bounds.Width, bounds.Height),
+            0, 0, ThemeBg.Width, ThemeBg.Height,
+            GraphicsUnit.Pixel, attrs);
     }
 
     private void SetupForm()
@@ -46,7 +80,7 @@ public class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         MinimumSize = new Size(820, 600);
-        BackColor = Color.FromArgb(245, 245, 245);
+        BackColor = Color.FromArgb(230, 240, 250);
     }
 
     private void SetupControls()
@@ -56,16 +90,30 @@ public class MainForm : Form
         {
             Dock = DockStyle.Top,
             Height = 60,
-            BackColor = AccentBlue
+            BackColor = Color.FromArgb(15, 90, 180)
         };
         var titleLabel = new Label
         {
-            Text = "  C盘缓存清理工具",
+            Text = "  ✦ Cache Cleaner — 缓存清理 ✦",
             ForeColor = Color.White,
             Font = FontTitle,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
         };
+
+        if (ThemeBg != null)
+        {
+            var avatar = new PictureBox
+            {
+                Image = ThemeBg,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Width = 48,
+                Height = 48,
+                Dock = DockStyle.Right,
+                BackColor = Color.Transparent
+            };
+            titlePanel.Controls.Add(avatar);
+        }
         titlePanel.Controls.Add(titleLabel);
         Controls.Add(titlePanel);
 
@@ -74,35 +122,36 @@ public class MainForm : Form
         {
             Dock = DockStyle.Top,
             Height = 50,
-            Padding = new Padding(15, 10, 15, 5)
+            Padding = new Padding(15, 10, 15, 5),
+            BackColor = Color.FromArgb(180, 230, 240, 250)
         };
 
-        btnScan = CreateButton("扫描缓存", AccentBlue, Color.White);
+        btnScan = CreateButton("🔍 扫描缓存", AccentBlue, Color.White);
         btnScan.Location = new Point(15, 10);
-        btnScan.Size = new Size(120, 35);
+        btnScan.Size = new Size(130, 35);
         btnScan.Click += BtnScan_Click;
 
-        btnClean = CreateButton("清理选中", DangerRed, Color.White);
-        btnClean.Location = new Point(150, 10);
-        btnClean.Size = new Size(120, 35);
+        btnClean = CreateButton("🧹 清理选中", DangerRed, Color.White);
+        btnClean.Location = new Point(160, 10);
+        btnClean.Size = new Size(130, 35);
         btnClean.Enabled = false;
         btnClean.Click += BtnClean_Click;
 
-        btnSelectAll = CreateButton("全选", GrayButton, Color.White);
-        btnSelectAll.Location = new Point(290, 10);
+        btnSelectAll = CreateButton("☑ 全选", GrayButton, Color.White);
+        btnSelectAll.Location = new Point(305, 10);
         btnSelectAll.Size = new Size(80, 35);
         btnSelectAll.Enabled = false;
         btnSelectAll.Click += (_, _) => SetAllChecked(true);
 
-        btnSelectNone = CreateButton("取消全选", GrayButton, Color.White);
-        btnSelectNone.Location = new Point(385, 10);
-        btnSelectNone.Size = new Size(90, 35);
+        btnSelectNone = CreateButton("☐ 取消全选", GrayButton, Color.White);
+        btnSelectNone.Location = new Point(400, 10);
+        btnSelectNone.Size = new Size(100, 35);
         btnSelectNone.Enabled = false;
         btnSelectNone.Click += (_, _) => SetAllChecked(false);
 
-        btnCancel = CreateButton("取消扫描", Color.FromArgb(183, 28, 28), Color.White);
-        btnCancel.Location = new Point(490, 10);
-        btnCancel.Size = new Size(90, 35);
+        btnCancel = CreateButton("✖ 取消", Color.FromArgb(183, 28, 28), Color.White);
+        btnCancel.Location = new Point(515, 10);
+        btnCancel.Size = new Size(85, 35);
         btnCancel.Visible = false;
         btnCancel.Click += (_, _) => _cts?.Cancel();
 
@@ -124,14 +173,15 @@ public class MainForm : Form
         {
             Dock = DockStyle.Bottom,
             Height = 35,
-            BackColor = GrayLight
+            BackColor = Color.FromArgb(200, 230, 240, 250)
         };
         lblStatus = new Label
         {
-            Text = "  就绪。点击「扫描缓存」开始。",
+            Text = "  就绪。点击「🔍 扫描缓存」开始。",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            Font = FontSmall
+            Font = FontSmall,
+            BackColor = Color.Transparent
         };
         lblTotal = new Label
         {
@@ -139,16 +189,17 @@ public class MainForm : Form
             Dock = DockStyle.Right,
             TextAlign = ContentAlignment.MiddleRight,
             Font = FontSmallBold,
-            Size = new Size(200, 35)
+            Size = new Size(200, 35),
+            BackColor = Color.Transparent
         };
         statusPanel.Controls.AddRange([lblStatus, lblTotal]);
         Controls.Add(statusPanel);
 
-        // 数据表格
-        dgv = new DataGridView
+        // 数据表格（使用自定义透明 DataGridView）
+        dgv = new AnimeDataGridView(this)
         {
             Dock = DockStyle.Fill,
-            BackgroundColor = Color.White,
+            BackgroundColor = Color.FromArgb(235, 240, 250),
             BorderStyle = BorderStyle.None,
             CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
             EnableHeadersVisualStyles = false,
@@ -160,20 +211,21 @@ public class MainForm : Form
             ReadOnly = false,
             MultiSelect = false,
             ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single,
-            GridColor = Color.FromArgb(230, 230, 230),
+            GridColor = Color.FromArgb(200, 215, 240),
             Font = FontNormal
         };
 
-        dgv.ColumnHeadersDefaultCellStyle.BackColor = GrayLight;
-        dgv.ColumnHeadersDefaultCellStyle.ForeColor = GrayText;
+        dgv.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(160, 220, 230, 245);
+        dgv.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(40, 40, 80);
         dgv.ColumnHeadersDefaultCellStyle.Font = FontNormalBold;
         dgv.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        dgv.ColumnHeadersDefaultCellStyle.SelectionBackColor = GrayLight;
-        dgv.ColumnHeadersDefaultCellStyle.SelectionForeColor = GrayText;
+        dgv.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(160, 200, 215, 240);
+        dgv.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.FromArgb(40, 40, 80);
         dgv.ColumnHeadersHeight = 36;
         dgv.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
 
-        dgv.AlternatingRowsDefaultCellStyle.BackColor = GrayLighter;
+        dgv.DefaultCellStyle.BackColor = Color.FromArgb(160, 240, 245, 255);
+        dgv.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(140, 230, 238, 252);
         dgv.RowTemplate.Height = 32;
 
         // 列定义
@@ -252,7 +304,7 @@ public class MainForm : Form
     }
 
     /// <summary>
-    /// 统一设置操作按钮的启用状态（替代 4 处重复的按钮切换代码）
+    /// 统一设置操作按钮的启用状态
     /// </summary>
     private void SetControlsEnabled(bool enabled)
     {
@@ -298,7 +350,7 @@ public class MainForm : Form
                 RiskLevel.Danger => DangerRed,
                 _ => Color.Black
             };
-            e.CellStyle.Font = FontNormalBold; // 使用缓存的字体，不再每次 new
+            e.CellStyle.Font = FontNormalBold;
         }
 
         if (dgv.Columns[e.ColumnIndex].Name == "Name")
@@ -400,14 +452,14 @@ public class MainForm : Form
         );
 
         if (!isKnown)
-            dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(235, 245, 255);
+            dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(140, 225, 235, 255);
 
         if (item.Risk == RiskLevel.Safe)
             dgv.Rows[rowIdx].Cells["Checked"].Value = true;
     }
 
     /// <summary>
-    /// 清理按钮点击（逐项 await，自然回到 UI 线程更新，无需 BeginInvoke）
+    /// 清理按钮点击
     /// </summary>
     private async void BtnClean_Click(object? sender, EventArgs e)
     {
@@ -465,26 +517,23 @@ public class MainForm : Form
                 _cts.Token.ThrowIfCancellationRequested();
                 var (rowIdx, name, path, _) = selectedItems[i];
 
-                // 更新进度（已在 UI 线程，直接操作控件）
                 lblStatus.Text = $"  正在清理: {name} ({i + 1}/{selectedItems.Count})";
                 progressBar.Maximum = selectedItems.Count;
                 progressBar.Value = i + 1;
-                dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(255, 243, 205);
+                dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(160, 255, 243, 205);
 
-                // 在后台线程执行清理
                 var item = new CacheItem { Name = name, Path = path, Exists = true };
                 long itemFreed = await Task.Run(() => CacheScanner.CleanItem(item, progress, _cts.Token));
                 totalFreed += itemFreed;
 
-                // await 后自动回到 UI 线程，直接更新控件
                 if (itemFreed > 0)
                 {
                     dgv.Rows[rowIdx].Cells["Size"].Value = item.SizeBytes;
-                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(212, 237, 218);
+                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(160, 212, 237, 218);
                 }
                 else
                 {
-                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = GrayLighter;
+                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(160, 230, 235, 245);
                 }
             }
 
@@ -500,7 +549,6 @@ public class MainForm : Form
                 MessageBoxIcon.Information
             );
 
-            // 自动重新扫描
             BtnScan_Click(null, EventArgs.Empty);
         }
         catch (OperationCanceledException)
@@ -555,7 +603,31 @@ public class MainForm : Form
         {
             _cts?.Cancel();
             _cts?.Dispose();
+            ThemeBg?.Dispose();
         }
         base.Dispose(disposing);
+    }
+
+    /// <summary>
+    /// 自定义 DataGridView：重绘背景为半透明主题图片，使背景图片能穿透表格显示
+    /// </summary>
+    private class AnimeDataGridView : DataGridView
+    {
+        private readonly MainForm _owner;
+
+        public AnimeDataGridView(MainForm owner)
+        {
+            _owner = owner;
+        }
+
+        protected override void PaintBackground(Graphics graphics, Rectangle clipBounds, Rectangle gridBounds)
+        {
+            // 用窗体的方法绘制背景图片（定位对齐窗体坐标）
+            var form = _owner;
+            var screenPos = form.PointToClient(Parent!.PointToScreen(Location));
+            graphics.TranslateTransform(-screenPos.X, -screenPos.Y);
+            form.DrawThemeBackground(graphics, new Rectangle(0, 0, form.ClientSize.Width, form.ClientSize.Height));
+            graphics.TranslateTransform(screenPos.X, screenPos.Y);
+        }
     }
 }

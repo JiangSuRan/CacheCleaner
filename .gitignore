@@ -2,6 +2,7 @@
 bin/
 obj/
 publish/
+publish2/
 installer/
 
 ## VS Code / IDE

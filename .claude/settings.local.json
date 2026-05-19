@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build *)",
+      "Bash(dotnet publish *)",
+      "Bash(cp \"D:/google/ChatGPT Image 2026年5月16日 11_20_35.png\" \"d:/tools/CacheCleaner/theme_bg.png\" && ls -la d:/tools/CacheCleaner/theme_bg.png)",
+      "Bash(dotnet run *)",
+      "Bash(taskkill /IM CacheCleaner.exe /F)",
+      "Bash(powershell -Command \"\\(New-Object -ComObject WScript.Shell\\).CreateShortcut\\('C:\\\\Users\\\\Admin\\\\Desktop\\\\CacheCleaner.lnk'\\)\")",
+      "Bash(git rm *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git tag *)",
+      "Bash(git push *)"
+    ],
+    "additionalDirectories": [
+      "D:\\google"
+    ]
+  }
+}
