@@ -10,7 +10,17 @@
       "Bash(git rm *)",
       "Bash(git commit -m ' *)",
       "Bash(git tag *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git reset *)",
+      "Bash(git add *)",
+      "Bash(powershell -Command '$shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut\\('\\\\''C:\\\\Users\\\\Admin\\\\Desktop\\\\CacheCleaner.lnk'\\\\''\\); $shortcut.TargetPath = '\\\\''D:\\\\tools\\\\CacheCleaner\\\\publish3\\\\CacheCleaner.exe'\\\\''; $shortcut.WorkingDirectory = '\\\\''D:\\\\tools\\\\CacheCleaner\\\\publish3'\\\\''; $shortcut.IconLocation = '\\\\''D:\\\\google\\\\Ch.ico,0'\\\\''; $shortcut.Save\\(\\); Write-Host '\\\\''Done'\\\\''')",
+      "Bash(powershell -Command \"[System.Environment]::SetEnvironmentVariable\\('COPILOT_PROVIDER_TYPE', 'anthropic', 'User'\\)\")",
+      "Bash(powershell -Command \"[System.Environment]::SetEnvironmentVariable\\('COPILOT_PROVIDER_BASE_URL', 'https://api.deepseek.com/anthropic', 'User'\\)\")",
+      "Bash(powershell -Command \"[System.Environment]::SetEnvironmentVariable\\('COPILOT_PROVIDER_API_KEY', 'sk-4a382208d10e4d339e38f819aa2254a2', 'User'\\)\")",
+      "Bash(powershell -Command \"[System.Environment]::SetEnvironmentVariable\\('COPILOT_MODEL', 'deepseek-v4-pro', 'User'\\)\")",
+      "Bash(powershell -Command \"[System.Environment]::GetEnvironmentVariable\\('COPILOT_PROVIDER_TYPE','User'\\); [System.Environment]::GetEnvironmentVariable\\('COPILOT_PROVIDER_BASE_URL','User'\\); [System.Environment]::GetEnvironmentVariable\\('COPILOT_MODEL','User'\\)\")",
+      "Bash(powershell -Command \"[System.Environment]::SetEnvironmentVariable\\('COPILOT_PROVIDER_MAX_PROMPT_TOKENS', '840000', 'User'\\)\")",
+      "Bash(powershell -Command \"[System.Environment]::SetEnvironmentVariable\\('COPILOT_PROVIDER_MAX_OUTPUT_TOKENS', '128000', 'User'\\)\")"
     ],
     "additionalDirectories": [
       "D:\\google"

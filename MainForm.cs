@@ -215,17 +215,17 @@ public class MainForm : Form
             Font = FontNormal
         };
 
-        dgv.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(160, 220, 230, 245);
+        dgv.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(220, 230, 245);
         dgv.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(40, 40, 80);
         dgv.ColumnHeadersDefaultCellStyle.Font = FontNormalBold;
         dgv.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        dgv.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(160, 200, 215, 240);
+        dgv.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(200, 215, 240);
         dgv.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.FromArgb(40, 40, 80);
         dgv.ColumnHeadersHeight = 36;
         dgv.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
 
-        dgv.DefaultCellStyle.BackColor = Color.FromArgb(160, 240, 245, 255);
-        dgv.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(140, 230, 238, 252);
+        dgv.DefaultCellStyle.BackColor = Color.FromArgb(240, 245, 255);
+        dgv.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(230, 238, 252);
         dgv.RowTemplate.Height = 32;
 
         // 列定义
@@ -452,7 +452,7 @@ public class MainForm : Form
         );
 
         if (!isKnown)
-            dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(140, 225, 235, 255);
+            dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(225, 235, 255);
 
         if (item.Risk == RiskLevel.Safe)
             dgv.Rows[rowIdx].Cells["Checked"].Value = true;
@@ -520,7 +520,7 @@ public class MainForm : Form
                 lblStatus.Text = $"  正在清理: {name} ({i + 1}/{selectedItems.Count})";
                 progressBar.Maximum = selectedItems.Count;
                 progressBar.Value = i + 1;
-                dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(160, 255, 243, 205);
+                dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(255, 243, 205);
 
                 var item = new CacheItem { Name = name, Path = path, Exists = true };
                 long itemFreed = await Task.Run(() => CacheScanner.CleanItem(item, progress, _cts.Token));
@@ -529,11 +529,11 @@ public class MainForm : Form
                 if (itemFreed > 0)
                 {
                     dgv.Rows[rowIdx].Cells["Size"].Value = item.SizeBytes;
-                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(160, 212, 237, 218);
+                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(212, 237, 218);
                 }
                 else
                 {
-                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(160, 230, 235, 245);
+                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(230, 235, 245);
                 }
             }
 
@@ -622,12 +622,20 @@ public class MainForm : Form
 
         protected override void PaintBackground(Graphics graphics, Rectangle clipBounds, Rectangle gridBounds)
         {
-            // 用窗体的方法绘制背景图片（定位对齐窗体坐标）
-            var form = _owner;
-            var screenPos = form.PointToClient(Parent!.PointToScreen(Location));
-            graphics.TranslateTransform(-screenPos.X, -screenPos.Y);
-            form.DrawThemeBackground(graphics, new Rectangle(0, 0, form.ClientSize.Width, form.ClientSize.Height));
-            graphics.TranslateTransform(screenPos.X, screenPos.Y);
+            try
+            {
+                var form = _owner;
+                if (form.IsHandleCreated && Parent != null)
+                {
+                    var screenPos = form.PointToClient(Parent.PointToScreen(Location));
+                    graphics.TranslateTransform(-screenPos.X, -screenPos.Y);
+                    form.DrawThemeBackground(graphics, new Rectangle(0, 0, form.ClientSize.Width, form.ClientSize.Height));
+                    graphics.TranslateTransform(screenPos.X, screenPos.Y);
+                    return;
+                }
+            }
+            catch { }
+            base.PaintBackground(graphics, clipBounds, gridBounds);
         }
     }
 }
