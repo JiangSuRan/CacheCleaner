@@ -1,6 +1,6 @@
 [Setup]
 AppName=C盘缓存清理工具
-AppVersion=3.0
+AppVersion=3.3
 AppPublisher=CacheCleaner
 DefaultDirName={autopf}\CacheCleaner
 DefaultGroupName=C盘缓存清理工具
@@ -10,7 +10,7 @@ SolidCompression=yes
 OutputDir=installer
 OutputBaseFilename=CacheCleaner-Setup
 SetupIconFile=app.ico
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 
 [Languages]
 

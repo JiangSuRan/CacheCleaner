@@ -74,7 +74,7 @@ public class MainForm : Form
 
     private void SetupForm()
     {
-        Text = "C盘缓存清理工具 v3.0";
+        Text = "C盘缓存清理工具 v3.3";
         Size = new Size(820, 600);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -373,6 +373,7 @@ public class MainForm : Form
         dgv.Rows.Clear();
 
         _cts = new CancellationTokenSource();
+        var token = _cts.Token; // 捕获到局部变量，防止清理 finally 将 _cts 置 null 后访问报错
         var knownProgress = new Progress<(int current, int total, string name)>(p =>
         {
             progressBar.Style = ProgressBarStyle.Continuous;
@@ -384,7 +385,7 @@ public class MainForm : Form
         try
         {
             // Phase 1: 已知缓存（快速，1-2秒）
-            var knownItems = await Task.Run(() => CacheScanner.ScanAll(knownProgress, _cts.Token));
+            var knownItems = await Task.Run(() => CacheScanner.ScanAll(knownProgress, token));
 
             foreach (var item in knownItems)
             {
@@ -403,7 +404,7 @@ public class MainForm : Form
             });
 
             var autoItems = await Task.Run(() =>
-                CacheScanner.ScanAutoDiscovered(knownItems, autoProgress, _cts.Token));
+                CacheScanner.ScanAutoDiscovered(knownItems, autoProgress, token));
 
             int autoCount = 0;
             foreach (var item in autoItems)
@@ -494,6 +495,11 @@ public class MainForm : Form
         if (warnItems.Count > 0)
             warning += $"\n\n注意项目:\n{string.Join("\n", warnItems.Select(x => $"  - {x.name}"))}\n请确保相关程序已关闭。";
 
+        // 检测正在运行、可能占用缓存的程序（P1-1）
+        var runningApps = CacheScanner.DetectRunningTargets();
+        if (runningApps.Count > 0)
+            warning += $"\n\n检测到以下程序正在运行，其缓存可能被占用：\n  {string.Join("、", runningApps)}\n建议先关闭后再清理，否则相关文件将被跳过或登记为重启删除。";
+
         var result = MessageBox.Show(
             $"确认清理 {selectedItems.Count} 个项目？{warning}",
             "确认清理",
@@ -508,7 +514,7 @@ public class MainForm : Form
 
         _cts = new CancellationTokenSource();
         var progress = new Progress<string>(msg => lblStatus.Text = $"  {msg}");
-        long totalFreed = 0;
+        var total = new CleanResult();
 
         try
         {
@@ -523,10 +529,11 @@ public class MainForm : Form
                 dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(255, 243, 205);
 
                 var item = new CacheItem { Name = name, Path = path, Exists = true };
-                long itemFreed = await Task.Run(() => CacheScanner.CleanItem(item, progress, _cts.Token));
-                totalFreed += itemFreed;
+                var itemResult = await Task.Run(() => CacheScanner.CleanItem(item, progress, _cts.Token));
+                total += itemResult;
 
-                if (itemFreed > 0)
+                // FreedBytes>0 表示释放了空间；DeletedCount>0 覆盖命令式项（如 DNS 刷新成功但不计字节）
+                if (itemResult.FreedBytes > 0 || itemResult.DeletedCount > 0)
                 {
                     dgv.Rows[rowIdx].Cells["Size"].Value = item.SizeBytes;
                     dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(212, 237, 218);
@@ -537,19 +544,19 @@ public class MainForm : Form
                 }
             }
 
-            string freedStr = CacheScanner.FormatSize(totalFreed);
-            lblStatus.Text = $"  清理完成！共释放 {freedStr}。";
+            string freedStr = CacheScanner.FormatSize(total.FreedBytes);
+            string statusDetail = total.TotalFailures > 0 ? $"（跳过 {total.TotalFailures} 个）" : "";
+            lblStatus.Text = $"  清理完成！共释放 {freedStr} {statusDetail}。";
             lblTotal.Text = $"释放: {freedStr}  ";
             lblTotal.ForeColor = SuccessGreen;
 
             MessageBox.Show(
-                $"清理完成！\n\n共释放: {freedStr}",
+                BuildCleanSummary(total, freedStr),
                 "清理完成",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information
             );
 
-            BtnScan_Click(null, EventArgs.Empty);
         }
         catch (OperationCanceledException)
         {
@@ -567,6 +574,29 @@ public class MainForm : Form
             _cts?.Dispose();
             _cts = null;
         }
+    }
+
+    /// <summary>
+    /// 构建清理完成汇总文案：释放量 + 删除文件数 + 失败/待处理明细
+    /// </summary>
+    private static string BuildCleanSummary(CleanResult total, string freedStr)
+    {
+        var summary = $"清理完成！\n\n共释放: {freedStr}\n删除 {total.DeletedCount} 个文件";
+
+        var detailParts = new List<string>();
+        if (total.LockedCount > 0) detailParts.Add($"{total.LockedCount} 个被占用");
+        if (total.PermissionDeniedCount > 0) detailParts.Add($"{total.PermissionDeniedCount} 个权限不足");
+        if (total.OtherFailureCount > 0) detailParts.Add($"{total.OtherFailureCount} 个其它失败");
+        if (total.PendingRebootCount > 0) detailParts.Add($"{total.PendingRebootCount} 个将于重启时删除");
+
+        if (detailParts.Count > 0)
+        {
+            summary += $"\n\n跳过/待处理：{string.Join("，", detailParts)}";
+            if (total.LockedCount > 0)
+                summary += "\n\n提示：被占用的文件通常是相关程序正在运行，关闭程序后再次清理即可。";
+        }
+
+        return summary;
     }
 
     private void UpdateTotalSize()
