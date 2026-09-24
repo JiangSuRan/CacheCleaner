@@ -20,7 +20,21 @@
       "Bash(powershell -Command \"[System.Environment]::SetEnvironmentVariable\\('COPILOT_MODEL', 'deepseek-v4-pro', 'User'\\)\")",
       "Bash(powershell -Command \"[System.Environment]::GetEnvironmentVariable\\('COPILOT_PROVIDER_TYPE','User'\\); [System.Environment]::GetEnvironmentVariable\\('COPILOT_PROVIDER_BASE_URL','User'\\); [System.Environment]::GetEnvironmentVariable\\('COPILOT_MODEL','User'\\)\")",
       "Bash(powershell -Command \"[System.Environment]::SetEnvironmentVariable\\('COPILOT_PROVIDER_MAX_PROMPT_TOKENS', '840000', 'User'\\)\")",
-      "Bash(powershell -Command \"[System.Environment]::SetEnvironmentVariable\\('COPILOT_PROVIDER_MAX_OUTPUT_TOKENS', '128000', 'User'\\)\")"
+      "Bash(powershell -Command \"[System.Environment]::SetEnvironmentVariable\\('COPILOT_PROVIDER_MAX_OUTPUT_TOKENS', '128000', 'User'\\)\")",
+      "Bash(powershell.exe *)",
+      "Bash(awk '{printf \"%.2f GB\\\\t%s\\\\n\", $1/1073741824, $2}')",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\Admin\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\diskcheck.ps1\")",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\Admin\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\appdata_scan.ps1\")",
+      "Bash(vssadmin list *)",
+      "Bash(compact /compactos:query)",
+      "Bash(awk '{printf \"%8.2f GB  %s\\\\n\", $1/1073741824, substr\\($0, index\\($0,$2\\)\\)}')",
+      "Bash(awk '{printf \"%8.2f GB %s\\\\n\", $1/1073741824, substr\\($0, index\\($0,$2\\)\\)}')",
+      "Bash(tasklist)",
+      "Bash(awk '{print $1}')",
+      "Bash(awk '{printf \"%8.2f MB %s\\\\n\", $1/1048576, substr\\($0, index\\($0,$2\\)\\)}')",
+      "Bash(awk '{printf \"%8.2f MB  %s\\\\n\", $1/1048576, substr\\($0, index\\($0,$2\\)\\)}')",
+      "Bash(rm *)",
+      "Bash(powershell -NoProfile -Command \"Get-Content 'C:\\\\Windows\\\\Logs\\\\DISM\\\\dism.log' -Tail 40 -ErrorAction SilentlyContinue | Select-String -Pattern 'Error|Failed|失败|错误' | Select-Object -Last 10\" ; echo \"=== 当前C盘 ===\"; df -h /c | tail -1; echo \"=== 还原点现状 ===\"; vssadmin list shadowstorage 2>&1 | grep -E \"GB|%\" | head -3)"
     ],
     "additionalDirectories": [
       "D:\\google"
