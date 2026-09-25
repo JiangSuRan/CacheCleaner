@@ -1,0 +1,278 @@
+{
+  "agents": [
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "vendor": "Anthropic",
+      "homeBase": "userProfile",
+      "home": ".claude",
+      "detect": ["config.json", ".credentials.json", "settings.local.json"],
+      "confidence": "verified+documented",
+      "verified": "2026-09-26",
+      "source": "anthropics/claude-code 官方 claude-directory 文档 + 本机实测",
+      "neverTouch": ["CLAUDE.md", "settings.json", "settings.local.json", ".credentials.json", "plugins", "agents", "skills", "commands", "keybindings.json", "history.jsonl", "file-history", "backups"],
+      "items": [
+        {
+          "name": "Claude 会话转录",
+          "path": "projects",
+          "class": "sessions",
+          "desc": "Claude Code 会话转录（对话记录），仅清理 30 天前的旧会话；配置/记忆/凭证绝不触碰",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": ["*.jsonl"],
+          "minAgeDays": 30,
+          "recursive": true
+        },
+        {
+          "name": "Claude Shell 快照",
+          "path": "shell-snapshots",
+          "class": "cache",
+          "desc": "Claude Code 的 shell 环境快照，可再生成",
+          "risk": "safe"
+        },
+        {
+          "name": "Claude 缓存",
+          "path": "cache",
+          "class": "cache",
+          "desc": "Claude Code 本地缓存",
+          "risk": "safe"
+        }
+      ]
+    },
+    {
+      "id": "codex",
+      "name": "Codex CLI",
+      "vendor": "OpenAI",
+      "homeBase": "userProfile",
+      "home": ".codex",
+      "detect": ["config.toml"],
+      "confidence": "verified+documented",
+      "verified": "2026-09-26",
+      "source": "openai/codex docs/config.md + rollout/src/lib.rs + 本机实测",
+      "neverTouch": ["config.toml", "auth.json", ".credentials.json", "history.jsonl", "AGENTS.md"],
+      "items": [
+        {
+          "name": "Codex 会话",
+          "path": "sessions",
+          "class": "sessions",
+          "desc": "Codex CLI 会话 rollout 记录，仅清理 30 天前的",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": ["*.jsonl"],
+          "minAgeDays": 30,
+          "recursive": true
+        },
+        {
+          "name": "Codex 日志",
+          "path": "log",
+          "class": "cache",
+          "desc": "Codex CLI 运行日志",
+          "risk": "safe"
+        }
+      ]
+    },
+    {
+      "id": "gemini-cli",
+      "name": "Gemini CLI",
+      "vendor": "Google",
+      "homeBase": "userProfile",
+      "home": ".gemini",
+      "detect": ["settings.json", "oauth_creds.json"],
+      "confidence": "documented",
+      "verified": "2026-09-26",
+      "source": "google-gemini/gemini-cli docs + packages/core/src/config/storage.ts",
+      "neverTouch": ["settings.json", "oauth_creds.json", "google_accounts.json", "trustedFolders.json", "mcp-oauth-tokens.json", "commands", "skills", "agents", "policies", "keybindings.json", "extensions", "installation_id", "bin"],
+      "items": [
+        {
+          "name": "Gemini 会话临时目录",
+          "path": "tmp",
+          "class": "sessions",
+          "desc": "按项目的会话数据（注意：含手动 /chat save 的保存点），仅清理 30 天前的",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": ["*"],
+          "minAgeDays": 30,
+          "recursive": true
+        },
+        {
+          "name": "Gemini 检查点历史",
+          "path": "history",
+          "class": "sessions",
+          "desc": "checkpointing 影子 git 仓库，仅清理 30 天前的",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": ["*"],
+          "minAgeDays": 30,
+          "recursive": true
+        }
+      ]
+    },
+    {
+      "id": "qwen-code",
+      "name": "Qwen Code",
+      "vendor": "Alibaba",
+      "homeBase": "userProfile",
+      "home": ".qwen",
+      "detect": ["settings.json"],
+      "confidence": "inferred-fork",
+      "verified": "2026-09-26",
+      "source": "QwenLM/qwen-code（gemini-cli fork，布局镜像）",
+      "neverTouch": ["settings.json", "oauth_creds.json", "skills", "commands", "extensions"],
+      "items": [
+        {
+          "name": "Qwen 会话临时目录",
+          "path": "tmp",
+          "class": "sessions",
+          "desc": "按项目的会话数据（fork 布局推断），仅清理 30 天前的",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": ["*"],
+          "minAgeDays": 30,
+          "recursive": true
+        },
+        {
+          "name": "Qwen 检查点历史",
+          "path": "history",
+          "class": "sessions",
+          "desc": "checkpointing 历史（fork 布局推断），仅清理 30 天前的",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": ["*"],
+          "minAgeDays": 30,
+          "recursive": true
+        }
+      ]
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "vendor": "anomalyco",
+      "homeBase": "userProfile",
+      "home": ".local\\share\\opencode",
+      "detect": ["auth.json"],
+      "confidence": "documented",
+      "verified": "2026-09-26",
+      "source": "opencode packages/web troubleshooting.mdx",
+      "neverTouch": ["auth.json", "project", "global"],
+      "items": [
+        {
+          "name": "OpenCode 日志",
+          "path": "log",
+          "class": "cache",
+          "desc": "OpenCode 运行日志（应用自带保留最近 10 个）",
+          "risk": "safe"
+        }
+      ]
+    },
+    {
+      "id": "amazon-q",
+      "name": "Amazon Q CLI",
+      "vendor": "AWS",
+      "homeBase": "userProfile",
+      "home": ".aws\\amazonq",
+      "detect": ["mcp.json", "cli-agents"],
+      "confidence": "documented",
+      "verified": "2026-09-26",
+      "source": "aws/amazon-q-developer-cli crates/chat-cli/src/util/paths.rs + docs/agent-file-locations.md",
+      "neverTouch": ["mcp.json", "cli-agents", "prompts", "profiles", "knowledge_bases", "global_context.json"],
+      "items": [
+        {
+          "name": "Amazon Q 检出缓存",
+          "path": "cli-checkouts",
+          "class": "cache",
+          "desc": "影子仓库检出缓存，可重建",
+          "risk": "safe"
+        }
+      ]
+    },
+    {
+      "id": "goose",
+      "name": "Goose",
+      "vendor": "Block",
+      "homeBase": "appData",
+      "home": "Block\\goose",
+      "detect": ["config.yaml"],
+      "confidence": "source-win-inferred",
+      "verified": "2026-09-26",
+      "source": "goose crates/goose/src/config/paths.rs（Windows 路径为 etcetera 策略推断）",
+      "neverTouch": ["config.yaml", "auth.json"],
+      "items": []
+    },
+    {
+      "id": "crush",
+      "name": "Crush",
+      "vendor": "Charm",
+      "homeBase": "userProfile",
+      "home": ".local\\share\\crush",
+      "detect": ["crush.json"],
+      "confidence": "source",
+      "verified": "2026-09-26",
+      "source": "crush internal/home/home.go + internal/config/scope.go",
+      "neverTouch": ["crush.json"],
+      "items": []
+    },
+    {
+      "id": "lingma",
+      "name": "通义灵码",
+      "vendor": "Alibaba",
+      "homeBase": "userProfile",
+      "home": ".lingma",
+      "detect": ["lingma_mcp.json"],
+      "confidence": "verified",
+      "verified": "2026-09-26",
+      "source": "本机实测",
+      "neverTouch": ["bin", "vscode", "model", "lingma_mcp.json", "extension"],
+      "items": [
+        {
+          "name": "通义灵码 缓存",
+          "path": "cache",
+          "class": "cache",
+          "desc": "通义灵码本地缓存",
+          "risk": "safe"
+        },
+        {
+          "name": "通义灵码 日志",
+          "path": "logs",
+          "class": "cache",
+          "desc": "通义灵码运行日志",
+          "risk": "safe"
+        },
+        {
+          "name": "通义灵码 代码索引",
+          "path": "index",
+          "class": "cache",
+          "desc": "通义灵码代码索引，清理后首次使用需重建索引",
+          "risk": "safe"
+        }
+      ]
+    },
+    {
+      "id": "marscode",
+      "name": "MarsCode",
+      "vendor": "ByteDance",
+      "homeBase": "userProfile",
+      "home": ".marscode",
+      "detect": ["config.json", "deviceInfo.json"],
+      "confidence": "verified",
+      "verified": "2026-09-26",
+      "source": "本机实测",
+      "neverTouch": ["ai-chat", "chat", "config.json", "deviceInfo.json", "vscode.mcp.config.json", ".agent"],
+      "items": [
+        {
+          "name": "MarsCode 代码索引",
+          "path": ".ckg",
+          "class": "cache",
+          "desc": "MarsCode 代码知识图谱索引，清理后重建",
+          "risk": "safe"
+        },
+        {
+          "name": "MarsCode 日志",
+          "path": "logs",
+          "class": "cache",
+          "desc": "MarsCode 运行日志",
+          "risk": "safe"
+        }
+      ]
+    }
+  ]
+}

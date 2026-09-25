@@ -340,6 +340,9 @@ public static class CacheScanner
         // Docker/WSL：prune 可回收量 + vhdx 虚拟磁盘压缩（取代旧整删危险项）
         ScanDockerWsl(items, progress, ref current, ref total, cancellationToken);
 
+        // 未收录 agent/工具目录探测：家目录下的大体积 dot-dir 报告（看得见比清得掉更重要）
+        ScanUnknownAgentHomes(items, ctx, progress, ref current, ref total, cancellationToken);
+
         return items;
     }
 
@@ -514,6 +517,10 @@ public static class CacheScanner
         // 遗留追踪会话：停止 WPR/手动内核追踪，终止持续写盘
         if (item.Name == "遗留性能追踪会话")
             return CleanLeftoverTraces();
+
+        // 未收录工具目录：仅报告占用，语义确认前绝不清理
+        if (item.Name.StartsWith("未收录工具目录"))
+            return default;
 
         // Docker/WSL：prune 与 vhdx 压缩均为官方再生性操作，取代旧的整删危险项
         if (item.Name == "Docker 未使用数据")
@@ -2435,6 +2442,74 @@ public static class CacheScanner
 
         return new CleanResult(Math.Max(0, before - SizeSum()), 1, 0, 0, 0, 0);
     }
+
+    /// <summary>
+    /// 未收录 agent/工具目录探测：家目录下未被任何规则/扫描器/agent 目录覆盖、
+    /// 且体积超阈值的 dot-dir，以「只报告不清理」方式列出——确认语义后可经
+    /// rules.user.json 纳入。这是「检测所有 agent」的兜底：已知全自动，未知看得见。
+    /// </summary>
+    private static void ScanUnknownAgentHomes(
+        List<CacheItem> items,
+        ScanContext ctx,
+        IProgress<(int current, int total, string name)>? progress,
+        ref int current,
+        ref int total,
+        CancellationToken cancellationToken)
+    {
+        // 已覆盖集合：本次扫描已生成的条目路径 + agent 目录 home + 明确的非工具目录
+        var covered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var it in items)
+        {
+            if (string.IsNullOrEmpty(it.Path) || it.Path == "（命令式清理）") continue;
+            try { covered.Add(Path.GetFullPath(it.Path).TrimEnd('\\')); } catch { }
+        }
+        foreach (var agent in AgentCatalog.All)
+        {
+            var home = agent.HomeFullPath;
+            if (home != null) covered.Add(home.TrimEnd('\\'));
+        }
+        foreach (var benign in BenignHomeDirs)
+            covered.Add(Path.Combine(ctx.UserProfile, benign).TrimEnd('\\'));
+
+        int reported = 0;
+        foreach (var dir in Directory.GetDirectories(ctx.UserProfile))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var name = Path.GetFileName(dir);
+            if (!name.StartsWith('.')) continue;                       // 仅探测 dot-dir
+            if (IsReparsePoint(dir)) continue;                        // 跳过 junction
+
+            var full = Path.GetFullPath(dir).TrimEnd('\\');
+            if (covered.Contains(full)) continue;
+
+            long size = SumFiles(dir);
+            if (size < 200L * 1024 * 1024) continue;                  // 噪音阈值
+
+            total++;
+            current++;
+            progress?.Report((current, total, $"未收录 {name}"));
+            items.Add(new CacheItem
+            {
+                Name = $"未收录工具目录 ({name})",
+                Path = full,
+                Desc = $"家目录下未收录的工具/agent 目录（{CacheScanner.FormatSize(size)}，只报告不清理）。确认语义后可在 rules.user.json 中纳入",
+                Risk = RiskLevel.Warn,
+                Exists = true,
+                SizeBytes = size
+            });
+            covered.Add(full);
+
+            if (++reported >= 5) break;                               // 最多报告 5 个，避免刷屏
+        }
+    }
+
+    /// <summary>
+    /// 家目录下判定为「非 agent 工具」的常见目录（凭证/运行时/系统），不进入未收录报告
+    /// </summary>
+    private static readonly HashSet<string> BenignHomeDirs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".ssh", ".gnupg", ".dotnet", ".docker", ".kube", ".aws", ".config", ".git", ".azure"
+    };
 
     /// <summary>
     /// 通用命令执行（如 ipconfig /flushdns），返回是否成功退出

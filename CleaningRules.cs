@@ -73,10 +73,17 @@ internal static class CleaningRules
             }
         }
 
+        // 3) Agent 目录：按收录数据编译 agent 规则（同名以先前来源优先）
+        foreach (var rule in AgentCatalog.CompileRules())
+        {
+            rules.RemoveAll(r => r.Name.Equals(rule.Name, StringComparison.Ordinal));
+            rules.Add(rule);
+        }
+
         return rules;
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Skip,

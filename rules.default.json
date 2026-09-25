@@ -108,7 +108,9 @@
     "path": "Microsoft\\Edge\\User Data\\Default\\Cache",
     "desc": "Edge 浏览器缓存（运行中自动跳过）",
     "risk": "safe",
-    "guardProcesses": ["msedge"]
+    "guardProcesses": [
+      "msedge"
+    ]
   },
   {
     "name": "Chrome 缓存",
@@ -116,7 +118,9 @@
     "path": "Google\\Chrome\\User Data\\Default\\Cache",
     "desc": "Chrome 浏览器缓存（运行中自动跳过）",
     "risk": "safe",
-    "guardProcesses": ["chrome"]
+    "guardProcesses": [
+      "chrome"
+    ]
   },
   {
     "name": "Windows 临时文件",
@@ -132,7 +136,10 @@
     "desc": "资源管理器缩略图与图标缓存（thumbcache_*/iconcache_*）",
     "risk": "safe",
     "clean": "files",
-    "filesPatterns": ["thumbcache_*", "iconcache_*"]
+    "filesPatterns": [
+      "thumbcache_*",
+      "iconcache_*"
+    ]
   },
   {
     "name": "Windows 预读取",
@@ -168,7 +175,9 @@
     "path": "bilibili\\Cache",
     "desc": "哔哩哔哩客户端缓存（运行中自动跳过）",
     "risk": "safe",
-    "guardProcesses": ["bilibili"]
+    "guardProcesses": [
+      "bilibili"
+    ]
   },
   {
     "name": "bilibili 日志",
@@ -302,7 +311,9 @@
     "path": "Tencent\\WeChat\\XPlugin",
     "desc": "微信3.x 小程序运行时组件，清理后首次使用小程序需重新下载（微信运行中自动跳过）",
     "risk": "warn",
-    "guardProcesses": ["WeChat"]
+    "guardProcesses": [
+      "WeChat"
+    ]
   },
   {
     "name": "微信4.0 日志",
@@ -310,7 +321,9 @@
     "path": "Tencent\\xwechat\\log",
     "desc": "微信4.0 运行日志（微信运行中自动跳过）",
     "risk": "safe",
-    "guardProcesses": ["Weixin"]
+    "guardProcesses": [
+      "Weixin"
+    ]
   },
   {
     "name": "微信4.0 更新包",
@@ -318,7 +331,9 @@
     "path": "Tencent\\xwechat\\update",
     "desc": "微信4.0 已下载的更新安装包（微信运行中自动跳过）",
     "risk": "safe",
-    "guardProcesses": ["Weixin"]
+    "guardProcesses": [
+      "Weixin"
+    ]
   },
   {
     "name": "微信4.0 小程序运行时",
@@ -326,7 +341,9 @@
     "path": "Tencent\\xwechat\\xplugin",
     "desc": "微信4.0 小程序运行时组件，清理后首次使用小程序需重新下载（微信运行中自动跳过）",
     "risk": "warn",
-    "guardProcesses": ["Weixin"]
+    "guardProcesses": [
+      "Weixin"
+    ]
   },
   {
     "name": "微信输入法安装包",
@@ -392,7 +409,9 @@
     "desc": "Windows 组件服务日志（CbsPersist_*），仅清理 30 天前的",
     "risk": "warn",
     "clean": "files",
-    "filesPatterns": ["CbsPersist_*"],
+    "filesPatterns": [
+      "CbsPersist_*"
+    ],
     "minAgeDays": 30
   },
   {
@@ -436,66 +455,6 @@
     "base": "userProfile",
     "path": ".codex\\.tmp",
     "desc": "OpenAI Codex CLI 临时文件",
-    "risk": "safe"
-  },
-  {
-    "name": "Claude 会话转录",
-    "base": "userProfile",
-    "path": ".claude\\projects",
-    "desc": "Claude Code 会话转录（对话记录），仅清理 30 天前的旧会话；配置/记忆/凭证绝不触碰",
-    "risk": "warn",
-    "clean": "files",
-    "filesPatterns": ["*.jsonl"],
-    "minAgeDays": 30,
-    "recursive": true
-  },
-  {
-    "name": "Claude Shell 快照",
-    "base": "userProfile",
-    "path": ".claude\\shell-snapshots",
-    "desc": "Claude Code 的 shell 环境快照，可再生成",
-    "risk": "safe"
-  },
-  {
-    "name": "Claude 缓存",
-    "base": "userProfile",
-    "path": ".claude\\cache",
-    "desc": "Claude Code 本地缓存",
-    "risk": "safe"
-  },
-  {
-    "name": "通义灵码 缓存",
-    "base": "userProfile",
-    "path": ".lingma\\cache",
-    "desc": "通义灵码本地缓存",
-    "risk": "safe"
-  },
-  {
-    "name": "通义灵码 日志",
-    "base": "userProfile",
-    "path": ".lingma\\logs",
-    "desc": "通义灵码运行日志",
-    "risk": "safe"
-  },
-  {
-    "name": "通义灵码 代码索引",
-    "base": "userProfile",
-    "path": ".lingma\\index",
-    "desc": "通义灵码代码索引，清理后首次使用需重建索引",
-    "risk": "safe"
-  },
-  {
-    "name": "MarsCode 代码索引",
-    "base": "userProfile",
-    "path": ".marscode\\.ckg",
-    "desc": "MarsCode 代码知识图谱索引，清理后重建",
-    "risk": "safe"
-  },
-  {
-    "name": "MarsCode 日志",
-    "base": "userProfile",
-    "path": ".marscode\\logs",
-    "desc": "MarsCode 运行日志",
     "risk": "safe"
   },
   {
