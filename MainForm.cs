@@ -37,6 +37,7 @@ public class MainForm : Form
     private Button btnSelectAll = null!;
     private Button btnSelectNone = null!;
     private Button btnCancel = null!;
+    private Button btnGrowth = null!;
     private ProgressBar progressBar = null!;
     private Label lblStatus = null!;
     private Label lblTotal = null!;
@@ -75,7 +76,7 @@ public class MainForm : Form
 
     private void SetupForm()
     {
-        Text = "C盘缓存清理工具 v3.5";
+        Text = "C盘缓存清理工具 v3.6";
         Size = new Size(820, 600);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -156,7 +157,13 @@ public class MainForm : Form
         btnCancel.Visible = false;
         btnCancel.Click += (_, _) => _cts?.Cancel();
 
-        buttonPanel.Controls.AddRange([btnScan, btnClean, btnSelectAll, btnSelectNone, btnCancel]);
+        // 增长分析：独立于扫描/清理流程，始终可用
+        btnGrowth = CreateButton("📈 增长分析", Color.FromArgb(23, 162, 184), Color.White);
+        btnGrowth.Location = new Point(615, 10);
+        btnGrowth.Size = new Size(115, 35);
+        btnGrowth.Click += (_, _) => new GrowthDialog().ShowDialog(this);
+
+        buttonPanel.Controls.AddRange([btnScan, btnClean, btnSelectAll, btnSelectNone, btnCancel, btnGrowth]);
         Controls.Add(buttonPanel);
 
         // 进度条
@@ -415,6 +422,9 @@ public class MainForm : Form
                 autoCount++;
             }
 
+            // 审计日志：记录本次扫描的全部条目
+            CleanLog.LogScan(knownItems.Concat(autoItems).ToList());
+
             // 按大小降序排列：清理收益一目了然；无路径的命令式项（0 B）自然沉底
             // Size 列在 SetupControls 中创建，此处用 null 容忍运算符声明不变量
             dgv.Sort(dgv.Columns["Size"]!, ListSortDirection.Descending);
@@ -515,6 +525,10 @@ public class MainForm : Form
 
         if (result != DialogResult.OK) return;
 
+        // 释放量的诚实口径：以 C 盘可用空间差为准（其他程序并发写入也会影响该差值）
+        long freeBefore = CacheScanner.GetCFreeBytes();
+        CleanLog.LogCleanStart(selectedItems.Count, freeBefore);
+
         SetControlsEnabled(false);
         progressBar.Visible = true;
 
@@ -537,6 +551,7 @@ public class MainForm : Form
                 var item = new CacheItem { Name = name, Path = path, Exists = true };
                 var itemResult = await Task.Run(() => CacheScanner.CleanItem(item, progress, _cts.Token));
                 total += itemResult;
+                CleanLog.LogCleanItem(name, path, itemResult);
 
                 // FreedBytes>0 表示释放了空间；DeletedCount>0 覆盖命令式项（如 DNS 刷新成功但不计字节）
                 if (itemResult.FreedBytes > 0 || itemResult.DeletedCount > 0)
@@ -551,13 +566,14 @@ public class MainForm : Form
             }
 
             string freedStr = CacheScanner.FormatSize(total.FreedBytes);
+            long freeAfter = CacheScanner.GetCFreeBytes();
             string statusDetail = total.TotalFailures > 0 ? $"（跳过 {total.TotalFailures} 个）" : "";
-            lblStatus.Text = $"  清理完成！共释放 {freedStr} {statusDetail}。";
+            lblStatus.Text = $"  清理完成！共释放 {freedStr} {statusDetail}。C 盘可用 +{CacheScanner.FormatSize(Math.Max(0, freeAfter - freeBefore))}";
             lblTotal.Text = $"释放: {freedStr}  ";
             lblTotal.ForeColor = SuccessGreen;
 
             MessageBox.Show(
-                BuildCleanSummary(total, freedStr),
+                BuildCleanSummary(total, freedStr, freeBefore, freeAfter),
                 "清理完成",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information
@@ -583,9 +599,9 @@ public class MainForm : Form
     }
 
     /// <summary>
-    /// 构建清理完成汇总文案：释放量 + 删除文件数 + 失败/待处理明细
+    /// 构建清理完成汇总文案：释放量 + 删除文件数 + 失败/待处理明细 + 磁盘可用空间前后差
     /// </summary>
-    private static string BuildCleanSummary(CleanResult total, string freedStr)
+    private static string BuildCleanSummary(CleanResult total, string freedStr, long freeBefore, long freeAfter)
     {
         var summary = $"清理完成！\n\n共释放: {freedStr}\n删除 {total.DeletedCount} 个文件";
 
@@ -601,6 +617,10 @@ public class MainForm : Form
             if (total.LockedCount > 0)
                 summary += "\n\n提示：被占用的文件通常是相关程序正在运行，关闭程序后再次清理即可。";
         }
+
+        summary += $"\n\nC 盘可用空间: {CacheScanner.FormatSize(freeBefore)} → {CacheScanner.FormatSize(freeAfter)}" +
+                   $"（净增 {CacheScanner.FormatSize(Math.Max(0, freeAfter - freeBefore))}）";
+        summary += "\n（文件累计与磁盘差值可能不同：其他程序同时在写入，重启删除的空间在重启后才回收）";
 
         return summary;
     }

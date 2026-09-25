@@ -431,6 +431,9 @@ public static class CacheScanner
         // AI CLI 自更新遗留的旧版本目录（保留最新）
         ScanCodexOldVersions(items, ctx, progress, ref current, ref total, cancellationToken);
 
+        // 遗留性能追踪会话（WPR 录制/手动内核追踪），持续写盘的经典增长源
+        ScanLeftoverTraces(items, progress, ref current, ref total, cancellationToken);
+
         return items;
     }
 
@@ -570,6 +573,10 @@ public static class CacheScanner
 
         if (item.Name == "Windows 升级残留")
             return CleanUpgradeRemnants(progress);
+
+        // 遗留追踪会话：停止 WPR/手动内核追踪，终止持续写盘
+        if (item.Name == "遗留性能追踪会话")
+            return CleanLeftoverTraces();
 
         // 只读报告项：删除 Package Cache 会破坏 Visual Studio 的修复/卸载能力，绝不清理
         if (item.Name == "VS 安装缓存")
@@ -726,10 +733,10 @@ public static class CacheScanner
                 {
                     // 文件被占用：先尝试登记为重启删除（需管理员），成功计为待重启，否则计为占用失败
                     if (ScheduleDeleteOnReboot(file.FullName)) pendingReboot++;
-                    else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); }
+                    else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); CleanLog.NoteFailure($"被占用: {file.FullName}"); }
                 }
-                catch (UnauthorizedAccessException) { denied++; Debug.WriteLine($"权限不足，跳过 {file.FullName}"); }
-                catch (Exception ex) { other++; Debug.WriteLine($"删除临时文件失败 {file.FullName}: {ex.Message}"); }
+                catch (UnauthorizedAccessException) { denied++; Debug.WriteLine($"权限不足，跳过 {file.FullName}"); CleanLog.NoteFailure($"权限不足: {file.FullName}"); }
+                catch (Exception ex) { other++; Debug.WriteLine($"删除临时文件失败 {file.FullName}: {ex.Message}"); CleanLog.NoteFailure($"其它失败: {file.FullName}"); }
             }
 
             // 从深到浅清理空目录
@@ -782,10 +789,10 @@ public static class CacheScanner
                 {
                     // 文件被占用：先尝试登记为重启删除（需管理员），成功计为待重启，否则计为占用失败
                     if (ScheduleDeleteOnReboot(file.FullName)) pendingReboot++;
-                    else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); }
+                    else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); CleanLog.NoteFailure($"被占用: {file.FullName}"); }
                 }
-                catch (UnauthorizedAccessException) { denied++; Debug.WriteLine($"权限不足，跳过 {file.FullName}"); }
-                catch (Exception ex) { other++; Debug.WriteLine($"删除文件失败 {file.FullName}: {ex.Message}"); }
+                catch (UnauthorizedAccessException) { denied++; Debug.WriteLine($"权限不足，跳过 {file.FullName}"); CleanLog.NoteFailure($"权限不足: {file.FullName}"); }
+                catch (Exception ex) { other++; Debug.WriteLine($"删除文件失败 {file.FullName}: {ex.Message}"); CleanLog.NoteFailure($"其它失败: {file.FullName}"); }
             }
         }
         catch (Exception ex)
@@ -848,10 +855,10 @@ public static class CacheScanner
                 {
                     // 文件被占用：先尝试登记为重启删除（需管理员），成功计为待重启，否则计为占用失败
                     if (ScheduleDeleteOnReboot(file.FullName)) pendingReboot++;
-                    else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); }
+                    else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); CleanLog.NoteFailure($"被占用: {file.FullName}"); }
                 }
-                catch (UnauthorizedAccessException) { denied++; Debug.WriteLine($"权限不足，跳过 {file.FullName}"); }
-                catch (Exception ex) { other++; Debug.WriteLine($"删除文件失败 {file.FullName}: {ex.Message}"); }
+                catch (UnauthorizedAccessException) { denied++; Debug.WriteLine($"权限不足，跳过 {file.FullName}"); CleanLog.NoteFailure($"权限不足: {file.FullName}"); }
+                catch (Exception ex) { other++; Debug.WriteLine($"删除文件失败 {file.FullName}: {ex.Message}"); CleanLog.NoteFailure($"其它失败: {file.FullName}"); }
             }
 
             // 从深到浅删除子目录
@@ -1582,6 +1589,7 @@ public static class CacheScanner
                     {
                         other++;
                         Debug.WriteLine($"删除旧版本失败 {versions[i].FullName}: {ex.Message}");
+                        CleanLog.NoteFailure($"其它失败: {versions[i].FullName}");
                     }
                 }
             }
@@ -1619,17 +1627,19 @@ public static class CacheScanner
                     catch (IOException)
                     {
                         if (ScheduleDeleteOnReboot(file.FullName)) pendingReboot++;
-                        else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); }
+                        else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); CleanLog.NoteFailure($"被占用: {file.FullName}"); }
                     }
                     catch (UnauthorizedAccessException)
                     {
                         denied++;
                         Debug.WriteLine($"权限不足，跳过 {file.FullName}");
+                        CleanLog.NoteFailure($"权限不足: {file.FullName}");
                     }
                     catch (Exception ex)
                     {
                         other++;
                         Debug.WriteLine($"删除过期文件失败 {file.FullName}: {ex.Message}");
+                        CleanLog.NoteFailure($"其它失败: {file.FullName}");
                     }
                 }
             }
@@ -2027,6 +2037,123 @@ public static class CacheScanner
         if (dirName is "log" or "logs")
             return RiskLevel.Warn;
         return RiskLevel.Safe;
+    }
+
+    /// <summary>
+    /// C 盘当前可用字节数。清理效果以磁盘可用空间差为准，文件长度累计仅作明细口径
+    /// （两者可能不同：其他程序并发写入、重启删除的空间在重启后才回收）。
+    /// </summary>
+    public static long GetCFreeBytes()
+    {
+        try { return new DriveInfo("C").AvailableFreeSpace; }
+        catch { return 0; }
+    }
+
+    /// <summary>
+    /// 执行命令并捕获标准输出（如 logman query -ets）。
+    /// </summary>
+    private static (bool Ok, string Output) RunCommandOutput(string fileName, string arguments, int timeoutMs = 15_000)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc == null) return (false, "");
+            string output = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(timeoutMs);
+            if (!proc.HasExited) return (false, output);
+            return (proc.ExitCode == 0, output);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"执行命令失败 {fileName} {arguments}: {ex.Message}");
+            return (false, "");
+        }
+    }
+
+    /// <summary>
+    /// 检测遗留的性能追踪会话（WPR 录制未停止、手动启动的内核追踪）。
+    /// 此类会话是「C 盘持续变小」的经典元凶：长期运行的 ETW 追踪会持续向磁盘刷缓冲。
+    /// Circular Kernel Context Logger、EventLog-* 等是系统正常会话，不在检测范围。
+    /// </summary>
+    private static void ScanLeftoverTraces(
+        List<CacheItem> items,
+        IProgress<(int current, int total, string name)>? progress,
+        ref int current,
+        ref int total,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var sessions = QueryLeftoverTraceSessions();
+        if (sessions.Count == 0) return;
+
+        total++;
+        current++;
+        progress?.Report((current, total, "遗留性能追踪会话"));
+        items.Add(new CacheItem
+        {
+            Name = "遗留性能追踪会话",
+            Path = "（命令式清理）",
+            Desc = $"检测到 {sessions.Count} 个长期运行的诊断追踪会话（{string.Join("、", sessions.Take(2))}{(sessions.Count > 2 ? " 等" : "")}），会持续写盘；清理 = 停止这些会话",
+            Risk = RiskLevel.Warn,
+            Exists = true,
+            SizeBytes = 0
+        });
+    }
+
+    /// <summary>
+    /// 从 logman query -ets 输出中筛出「正在运行」的遗留追踪会话名
+    /// </summary>
+    private static List<string> QueryLeftoverTraceSessions()
+    {
+        var (_, output) = RunCommandOutput("logman", "query -ets");
+        var sessions = new List<string>();
+        foreach (var line in output.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0 || trimmed.StartsWith('-') || trimmed.StartsWith("数据收集器集")) continue;
+            if (!trimmed.Contains("正在运行") && !trimmed.Contains("Running")) continue;
+
+            string? name = null;
+            if (trimmed.Contains("WPR_initiated_"))
+            {
+                name = trimmed.Split(' ')[0];
+            }
+            else if (trimmed.StartsWith("NT Kernel Logger"))
+            {
+                // 手动实例的内核追踪；Circular Kernel Context Logger 是系统正常会话，不碰
+                name = "NT Kernel Logger";
+            }
+            if (name != null && !sessions.Contains(name)) sessions.Add(name);
+        }
+        return sessions;
+    }
+
+    /// <summary>
+    /// 停止遗留的追踪会话（logman stop "&lt;name&gt;" -ets）。
+    /// 部分 SYSTEM 保护级会话可能停不掉，失败计入其它失败；停止后追踪文件不再增长，
+    /// 受保护残留会话在下次重启后自然消失。
+    /// </summary>
+    private static CleanResult CleanLeftoverTraces()
+    {
+        var sessions = QueryLeftoverTraceSessions();
+        if (sessions.Count == 0) return new CleanResult(0, 1, 0, 0, 0, 0);
+
+        int stopped = 0, failed = 0;
+        foreach (var session in sessions)
+        {
+            if (RunCommand("logman", $"stop \"{session}\" -ets", 30_000)) stopped++;
+            else failed++;
+        }
+        return new CleanResult(0, stopped, 0, 0, failed, 0);
     }
 
     /// <summary>

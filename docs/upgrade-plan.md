@@ -79,6 +79,8 @@ Remove-Item "C:\Windows\System32\LogFiles\WMI\NetCore.etl" -Force
 
 ## 5. 阶段 2 —— 架构升级（3-5 天）
 
+> ⏳ 状态：部分完成（2026-09-26，随 v3.6）。已完成 ④ 审计日志落盘、⑤ 增长分析页、⑥ 遗留追踪检测与停止、⑦ 可用空间差口径；待做：① JSON 规则引擎、② 逐规则进程守卫、③ 统一命令框架（WaitForExitAsync）、⑧ 干跑/设置持久化/Docker prune+vhdx。
+
 1. **规则引擎外置 JSON**（对标 [MoscaDotTo/Winapp2](https://github.com/MoscaDotTo/Winapp2)）：每条规则声明 `name/base/pattern/risk/cleanMethod(dir|files|command|keepNewest)/guardProcesses/serviceGuards/minAgeDays/reportOnly`；随发行版带默认规则 + 侧车文件热加载，补规则不改代码。
 2. **每规则进程守卫**：把 `DetectRunningTargets` 硬编码表搬进规则，清理前逐项检测提示。
 3. **统一命令式框架**：服务停启、官方 cmdlet、`WaitForExitAsync` + 取消令牌。
