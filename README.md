@@ -17,7 +17,7 @@
 
 ## ✨ 一句话介绍
 
-双击即用的系统缓存清理器：**两阶段扫描**找到缓存，**三级风险标注**守住安全线，**预览模式**先看后删，**审计日志**让每一 MB 有据可查，**JSON 规则引擎**让覆盖面可以无限扩展——所有这些都装在一个 118 MB 的自包含 exe 里。
+双击即用的系统缓存清理器：**两阶段扫描**找到缓存，**三级风险标注**守住安全线，**预览模式**先看后删，**审计日志**让每一 MB 有据可查，**JSON 规则引擎**让覆盖面无限扩展，**Agent 规则包**直面 AI 时代开发者磁盘膨胀（会话转录、模型仓库、自更新堆积）——所有这些都装在一个 118 MB 的自包含 exe 里。
 
 ## 🎯 核心能力
 
@@ -68,12 +68,23 @@
     "risk": "warn",
     "clean": "files",
     "filesPatterns": ["*.log"],
-    "minAgeDays": 30
+    "minAgeDays": 30,
+    "recursive": true
+  },
+  {
+    "name": "Go 模块缓存",
+    "base": "userProfile",
+    "path": "go\\pkg\\mod",
+    "desc": "官方命令清理，按目标目录前后差值计释放",
+    "risk": "safe",
+    "clean": "command",
+    "command": "go clean -modcache",
+    "commandTimeoutMs": 600000
   }
 ]
 ```
 
-字段速查：`base`（`localAppData` / `appData` / `userProfile` / `windows` / `programData` / `driveRoot`）· `risk`（`safe` / `warn` / `danger`）· `kind`（`path` / `file` / `special`）· `clean`（`directory` / `files` / `reportOnly`）· `filesPatterns` · `minAgeDays` · `skipSize` · `guardProcesses`。
+字段速查：`base`（`localAppData` / `appData` / `userProfile` / `windows` / `programData` / `driveRoot`）· `risk`（`safe` / `warn` / `danger`）· `kind`（`path` / `file` / `special`）· `clean`（`directory` / `files` / `command` / `reportOnly`）· `filesPatterns` · `minAgeDays` · `recursive` · `skipSize` · `guardProcesses` · `command` + `commandTimeoutMs`（`clean: "command"` 时的官方清理命令与超时）。
 
 ### 增长基线监控
 
@@ -120,13 +131,14 @@ ISCC setup.iss
 ```
 ├── CacheScanner.cs      # 扫描/清理核心（规则引擎消费端、进程守卫、命令式清理框架）
 ├── CleaningRules.cs     # JSON 规则加载器（内嵌默认 + 侧车覆盖）
-├── rules.default.json   # 内嵌声明式规则（64 条）
+├── rules.default.json   # 内嵌声明式规则（75 条）
 ├── CleanLog.cs          # 清理审计日志
-├── GrowthDialog.cs      # 增长分析页
+├── GrowthDialog.cs      # 增长分析页（含迁盘顾问）
 ├── AppSettings.cs       # 设置持久化
 ├── MainForm.cs          # 主界面
+├── LICENSE              # MIT
 ├── cleanup/             # 增长基线监控脚本等辅助工具
-└── docs/upgrade-plan.md # 设计与演进记录
+└── docs/                # 设计演进记录 + Agent 时代专项调研报告
 ```
 
 ## 📸 截图
