@@ -19,18 +19,23 @@ public class GrowthDialog : Form
     private ListView lvFiles = null!;
     private CancellationTokenSource? _cts;
 
-    // 扫描根：用户可写区域 + 常见系统日志区；枚举跳过 reparse point 防止 junction 环
-    private static readonly string[] ScanRoots =
-    [
-        "%APPDATA%", "%LOCALAPPDATA%",
-        "%USERPROFILE%\\xwechat_files", "%USERPROFILE%\\Documents",
-        "%USERPROFILE%\\Downloads", "%USERPROFILE%\\Desktop",
-        "C:\\ProgramData",
-        "C:\\Windows\\Temp", "C:\\Windows\\Logs",
-        "C:\\Windows\\System32\\LogFiles",
-        "C:\\Windows\\SoftwareDistribution",
-        "C:\\Windows\\LiveKernelReports", "C:\\Windows\\Minidump"
-    ];
+    // 系统相关扫描根在运行时按实际 Windows/ProgramData 位置构建（通用性：不假设系统在 C 盘）
+    private static string[] BuildScanRoots()
+    {
+        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        return
+        [
+            "%APPDATA%", "%LOCALAPPDATA%",
+            "%USERPROFILE%\\xwechat_files", "%USERPROFILE%\\Documents",
+            "%USERPROFILE%\\Downloads", "%USERPROFILE%\\Desktop",
+            programData,
+            Path.Combine(windows, "Temp"), Path.Combine(windows, "Logs"),
+            Path.Combine(windows, "System32", "LogFiles"),
+            Path.Combine(windows, "SoftwareDistribution"),
+            Path.Combine(windows, "LiveKernelReports"), Path.Combine(windows, "Minidump")
+        ];
+    }
 
     private const long MinFileSize = 50L * 1024 * 1024;
     private const int MaxResults = 50;
@@ -193,7 +198,7 @@ public class GrowthDialog : Form
             AttributesToSkip = FileAttributes.ReparsePoint
         };
 
-        foreach (var root in ScanRoots)
+        foreach (var root in BuildScanRoots())
         {
             token.ThrowIfCancellationRequested();
             var expanded = Environment.ExpandEnvironmentVariables(root);

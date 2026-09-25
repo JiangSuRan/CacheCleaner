@@ -83,6 +83,19 @@ public static class CacheScanner
 {
     private static readonly string[] SizeUnits = ["B", "KB", "MB", "GB", "TB"];
 
+    // 系统盘根（如 C:\）：运行时从系统目录推导，Windows 装在非 C 盘的机器上同样可用。
+    // 注意静态初始化顺序：本字段必须先于 SkipRoots/AllowedSystemPaths 声明。
+    internal static readonly string SysRoot = InitSysRoot();
+
+    // 系统盘盘符（如 'C'），用于 vssadmin 等命令行参数
+    internal static readonly char SysDriveLetter = SysRoot[0];
+
+    private static string InitSysRoot()
+    {
+        var root = Path.GetPathRoot(Environment.SystemDirectory);
+        return string.IsNullOrEmpty(root) ? @"C:\" : root.ToUpperInvariant();
+    }
+
     // 匹配缓存目录的名称（不区分大小写）
     private static readonly HashSet<string> CacheDirNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -96,14 +109,27 @@ public static class CacheScanner
         "crashdumps", "minidump"
     };
 
-    // 跳过的根目录（不扫描系统目录）
-    private static readonly HashSet<string> SkipRoots = new(StringComparer.OrdinalIgnoreCase)
+    // 跳过的根目录（不扫描系统目录）；盘符随系统盘运行时推导
+    private static readonly HashSet<string> SkipRoots = BuildSkipRoots();
+
+    private static HashSet<string> BuildSkipRoots()
     {
-        @"C:\Windows", @"C:\Program Files", @"C:\Program Files (x86)",
-        @"C:\ProgramData", @"C:\System Volume Information",
-        @"C:\$Recycle.Bin", @"C:\$Windows.~WS", @"C:\$Windows.~BT",
-        @"C:\Recovery", @"C:\Intel", @"C:\PerfLogs"
-    };
+        var root = SysRoot.TrimEnd('\\');
+        return new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            Path.Combine(root, "Windows"),
+            Path.Combine(root, "Program Files"),
+            Path.Combine(root, "Program Files (x86)"),
+            Path.Combine(root, "ProgramData"),
+            Path.Combine(root, "System Volume Information"),
+            Path.Combine(root, "$Recycle.Bin"),
+            Path.Combine(root, "$Windows.~WS"),
+            Path.Combine(root, "$Windows.~BT"),
+            Path.Combine(root, "Recovery"),
+            Path.Combine(root, "Intel"),
+            Path.Combine(root, "PerfLogs")
+        };
+    }
 
     // 跳过的子目录名（大型非缓存目录）
     private static readonly HashSet<string> SkipDirNames = new(StringComparer.OrdinalIgnoreCase)
@@ -120,13 +146,7 @@ public static class CacheScanner
     // 最大扫描深度
     private const int MaxDepth = 8;
 
-    // Conda 可能的安装路径（仅限 C 盘用户目录和已知安全路径）
-    private static readonly string[] CondaPkgsPaths =
-    [
-        @"C:\anaconda3\pkgs",
-        @"C:\miniconda3\pkgs",
-        @"C:\Miniconda3\pkgs"
-    ];
+    // Conda 安装位置不再硬编码：运行时经 conda info --base 与常见位置动态发现（见 GetCondaPkgsCandidates）
 
     // 合法的 pip 缓存路径特征
     private static readonly string[] ValidPipCacheKeywords = ["pip", "cache", "pypa"];
@@ -260,7 +280,8 @@ public static class CacheScanner
     {
         var items = new List<CacheItem>();
         var ctx = new ScanContext();
-        int total = KnownCaches.Length + CondaPkgsPaths.Length;
+        var condaCandidates = GetCondaPkgsCandidates();
+        int total = KnownCaches.Length + condaCandidates.Count;
         int current = 0;
 
         foreach (var (name, relativePath, desc, risk, baseFolder) in KnownCaches)
@@ -322,7 +343,7 @@ public static class CacheScanner
                 // 回收站：SumFiles 对隐藏+系统属性目录可正常统计（本程序以管理员运行）
                 if (name == "回收站")
                 {
-                    item.Path = Path.Combine(@"C:\", relativePath);
+                    item.Path = Path.Combine(SysRoot, relativePath);
                     item.Exists = Directory.Exists(item.Path);
                     if (item.Exists) item.SizeBytes = SumFiles(item.Path);
                     items.Add(item);
@@ -354,7 +375,12 @@ public static class CacheScanner
                 if (name == "Windows 升级残留")
                 {
                     long remnantBytes = 0;
-                    foreach (var remnant in new[] { @"C:\Windows.old", @"C:\$GetCurrent", @"C:\ESD" })
+                    foreach (var remnant in new[]
+                             {
+                                 Path.Combine(SysRoot, "Windows.old"),
+                                 Path.Combine(SysRoot, "$GetCurrent"),
+                                 Path.Combine(SysRoot, "ESD")
+                             })
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         if (Directory.Exists(remnant)) remnantBytes += SumFiles(remnant);
@@ -398,8 +424,8 @@ public static class CacheScanner
             items.Add(item);
         }
 
-        // Conda pkgs 单独扫描
-        ScanCondaPkgs(items, progress, ref current, ref total, cancellationToken);
+        // Conda pkgs 单独扫描（动态发现安装位置）
+        ScanCondaPkgs(items, condaCandidates, progress, ref current, ref total, cancellationToken);
 
         // Electron 应用更新缓存
         ScanUpdaterCaches(items, ctx, progress, ref current, ref total, cancellationToken);
@@ -456,8 +482,8 @@ public static class CacheScanner
                     ? Path.Combine(ctx.ProgramData, relativePath)
                     : null,
             BaseFolder.DriveRoot =>
-                Directory.Exists(Path.Combine(@"C:\", relativePath))
-                    ? Path.Combine(@"C:\", relativePath)
+                Directory.Exists(Path.Combine(SysRoot, relativePath))
+                    ? Path.Combine(SysRoot, relativePath)
                     : null,
             _ => null
         };
@@ -493,33 +519,64 @@ public static class CacheScanner
     }
 
     /// <summary>
-    /// 扫描 Conda pkgs 目录
+    /// 收集 Conda pkgs 的候选路径：PATH 中有 conda 时 info --base 给出真实安装根，
+    /// 否则枚举用户级/系统级常见位置；盘符随系统盘推导，不再硬编码
+    /// </summary>
+    private static List<string> GetCondaPkgsCandidates()
+    {
+        var candidates = new List<string>();
+
+        var (ok, output) = RunCommandOutput("conda", "info --base", 10_000);
+        if (ok)
+        {
+            var baseDir = output.Trim().Trim('"');
+            if (baseDir.Length > 0 && Directory.Exists(baseDir))
+                candidates.Add(Path.Combine(baseDir, "pkgs"));
+        }
+
+        foreach (var baseDir in new[]
+                 {
+                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                     Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                     SysRoot.TrimEnd('\\')
+                 })
+        {
+            if (string.IsNullOrEmpty(baseDir)) continue;
+            foreach (var name in new[] { "anaconda3", "miniconda3", "Miniconda3", "Anaconda3" })
+                candidates.Add(Path.Combine(baseDir, name, "pkgs"));
+        }
+
+        return candidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>
+    /// 扫描 Conda pkgs 目录（动态发现安装位置，命中第一个存在的即止）
     /// </summary>
     private static void ScanCondaPkgs(
         List<CacheItem> items,
+        List<string> candidates,
         IProgress<(int current, int total, string name)>? progress,
         ref int current,
         ref int total,
         CancellationToken cancellationToken)
     {
-        foreach (var condaPath in CondaPkgsPaths)
+        foreach (var condaPath in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
             current++;
-            if (Directory.Exists(condaPath))
+            if (!Directory.Exists(condaPath)) continue;
+
+            progress?.Report((current, total, "Conda 缓存"));
+            items.Add(new CacheItem
             {
-                progress?.Report((current, total, "Conda 缓存"));
-                items.Add(new CacheItem
-                {
-                    Name = "Conda 包缓存",
-                    Path = condaPath,
-                    Desc = "Anaconda/Miniconda 包缓存目录",
-                    Risk = RiskLevel.Safe,
-                    Exists = true,
-                    SizeBytes = SumFiles(condaPath)
-                });
-                break; // 找到一个就够了
-            }
+                Name = "Conda 包缓存",
+                Path = condaPath,
+                Desc = "Anaconda/Miniconda 包缓存目录",
+                Risk = RiskLevel.Safe,
+                Exists = true,
+                SizeBytes = SumFiles(condaPath)
+            });
+            break; // 找到一个就够了
         }
     }
 
@@ -628,12 +685,17 @@ public static class CacheScanner
     }
 
     /// <summary>
-    /// 显式放行的系统级清理路径前缀（精确到具体目录，绝不放开整个 C:\ProgramData）
+    /// 显式放行的系统级清理路径前缀（精确到具体目录，绝不放开整个盘根）。
+    /// 含 Conda 经典系统级安装位置——否则其 pkgs 项会被路径安全校验静默拒绝（清理死代码）。
     /// </summary>
     private static readonly string[] AllowedSystemPaths =
     [
-        @"C:\ProgramData\Microsoft\Windows\WER",
-        @"C:\$Recycle.Bin"
+        Path.Combine(SysRoot.TrimEnd('\\'), @"ProgramData\Microsoft\Windows\WER"),
+        Path.Combine(SysRoot.TrimEnd('\\'), "$Recycle.Bin"),
+        Path.Combine(SysRoot.TrimEnd('\\'), "anaconda3"),
+        Path.Combine(SysRoot.TrimEnd('\\'), "miniconda3"),
+        Path.Combine(SysRoot.TrimEnd('\\'), "Miniconda3"),
+        Path.Combine(SysRoot.TrimEnd('\\'), "Anaconda3")
     ];
 
     /// <summary>
@@ -646,8 +708,8 @@ public static class CacheScanner
         {
             var fullPath = Path.GetFullPath(path);
 
-            // 必须在 C 盘
-            if (!fullPath.StartsWith(@"C:\", StringComparison.OrdinalIgnoreCase))
+            // 必须在系统盘
+            if (!fullPath.StartsWith(SysRoot, StringComparison.OrdinalIgnoreCase))
                 return false;
 
             var userProfile = Environment.GetEnvironmentVariable("USERPROFILE") ?? "";
@@ -663,8 +725,8 @@ public static class CacheScanner
                 return true;
             if (fullPath.StartsWith(windowsDir, StringComparison.OrdinalIgnoreCase))
                 return true;
-            // 自动发现的多用户路径（C:\Users\ 下的其他用户目录）
-            if (fullPath.StartsWith(@"C:\Users\", StringComparison.OrdinalIgnoreCase))
+            // 自动发现的多用户路径（系统盘 Users 下的其他用户目录）
+            if (fullPath.StartsWith(SysRoot + "Users\\", StringComparison.OrdinalIgnoreCase))
                 return true;
 
             // 显式声明的系统级安全路径（如 C:\ProgramData\Microsoft\Windows\WER）
@@ -1720,7 +1782,7 @@ public static class CacheScanner
             var psi = new ProcessStartInfo
             {
                 FileName = "vssadmin",
-                Arguments = "list shadowstorage /for=C:",
+                Arguments = $"list shadowstorage /for={SysDriveLetter}:",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -1732,10 +1794,12 @@ public static class CacheScanner
             proc.WaitForExit(15000);
             if (proc.ExitCode != 0) return (0, false);
 
-            var match = Regex.Match(output, @"(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB)", RegexOptions.IgnoreCase);
+            // 数值兼容小数逗号 locale（如 de-DE 输出 5,2 GB）：统一替换逗号后按不变文化解析
+            var match = Regex.Match(output, @"(\d+(?:[.,]\d+)?)\s*(KB|MB|GB|TB)", RegexOptions.IgnoreCase);
             if (!match.Success) return (0, false);
 
-            double value = double.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            double value = double.Parse(match.Groups[1].Value.Replace(',', '.'),
+                System.Globalization.CultureInfo.InvariantCulture);
             long bytes = match.Groups[2].Value.ToUpperInvariant() switch
             {
                 "TB" => (long)(value * 1024L * 1024 * 1024 * 1024),
@@ -1758,7 +1822,7 @@ public static class CacheScanner
     /// </summary>
     private static CleanResult CleanRecycleBin(CancellationToken cancellationToken)
     {
-        var binRoot = @"C:\$Recycle.Bin";
+        var binRoot = Path.Combine(SysRoot, "$Recycle.Bin");
         if (!Directory.Exists(binRoot)) return default;
 
         CleanResult total = default;
@@ -1784,7 +1848,8 @@ public static class CacheScanner
     private static CleanResult ShrinkShadowStorage(CacheItem item, IProgress<string>? progress)
     {
         progress?.Report("正在缩减还原点存储上限到 3GB...");
-        bool ok = RunCommand("vssadmin", "resize shadowstorage /for=C: /on=C: /maxsize=3GB", 120_000);
+        bool ok = RunCommand("vssadmin",
+            $"resize shadowstorage /for={SysDriveLetter}: /on={SysDriveLetter}: /maxsize=3GB", 120_000);
         if (ok) item.SizeBytes = 0;     // 清理后表格立即归零，不再显示旧占用
         return new CleanResult(0, ok ? 1 : 0, 0, 0, ok ? 0 : 1, 0);
     }
@@ -1865,8 +1930,8 @@ public static class CacheScanner
     {
         if (depth > MaxDepth) return;
 
-        // 驱动器边界检查：仅允许 C 盘
-        if (!path.StartsWith(@"C:\", StringComparison.OrdinalIgnoreCase))
+        // 驱动器边界检查：仅允许系统盘
+        if (!path.StartsWith(SysRoot, StringComparison.OrdinalIgnoreCase))
             return;
 
         string[] subDirs;
@@ -1915,7 +1980,7 @@ public static class CacheScanner
                 catch { continue; }
 
                 // 二次驱动器校验（路径解析后可能变化）
-                if (!dir.StartsWith(@"C:\", StringComparison.OrdinalIgnoreCase))
+                if (!dir.StartsWith(SysRoot, StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 // 计算大小
@@ -2040,12 +2105,12 @@ public static class CacheScanner
     }
 
     /// <summary>
-    /// C 盘当前可用字节数。清理效果以磁盘可用空间差为准，文件长度累计仅作明细口径
+    /// 系统盘当前可用字节数。清理效果以磁盘可用空间差为准，文件长度累计仅作明细口径
     /// （两者可能不同：其他程序并发写入、重启删除的空间在重启后才回收）。
     /// </summary>
     public static long GetCFreeBytes()
     {
-        try { return new DriveInfo("C").AvailableFreeSpace; }
+        try { return new DriveInfo(SysRoot).AvailableFreeSpace; }
         catch { return 0; }
     }
 
@@ -2119,7 +2184,9 @@ public static class CacheScanner
         foreach (var line in output.Split('\n'))
         {
             var trimmed = line.Trim();
-            if (trimmed.Length == 0 || trimmed.StartsWith('-') || trimmed.StartsWith("数据收集器集")) continue;
+            // 表头兼容中英文系统（数据收集器集 / Data Collector Set）
+            if (trimmed.Length == 0 || trimmed.StartsWith('-') ||
+                trimmed.StartsWith("数据收集器集") || trimmed.StartsWith("Data Collector Set")) continue;
             if (!trimmed.Contains("正在运行") && !trimmed.Contains("Running")) continue;
 
             string? name = null;
