@@ -6,11 +6,28 @@
       "vendor": "Anthropic",
       "homeBase": "userProfile",
       "home": ".claude",
-      "detect": ["config.json", ".credentials.json", "settings.local.json"],
+      "detect": [
+        "config.json",
+        ".credentials.json",
+        "settings.local.json"
+      ],
       "confidence": "verified+documented",
       "verified": "2026-09-26",
       "source": "anthropics/claude-code 官方 claude-directory 文档 + 本机实测",
-      "neverTouch": ["CLAUDE.md", "settings.json", "settings.local.json", ".credentials.json", "plugins", "agents", "skills", "commands", "keybindings.json", "history.jsonl", "file-history", "backups"],
+      "neverTouch": [
+        "CLAUDE.md",
+        "settings.json",
+        "settings.local.json",
+        ".credentials.json",
+        "plugins",
+        "agents",
+        "skills",
+        "commands",
+        "keybindings.json",
+        "history.jsonl",
+        "file-history",
+        "backups"
+      ],
       "items": [
         {
           "name": "Claude 会话转录",
@@ -19,7 +36,9 @@
           "desc": "Claude Code 会话转录（对话记录），仅清理 30 天前的旧会话；配置/记忆/凭证绝不触碰",
           "risk": "warn",
           "clean": "files",
-          "filesPatterns": ["*.jsonl"],
+          "filesPatterns": [
+            "*.jsonl"
+          ],
           "minAgeDays": 30,
           "recursive": true
         },
@@ -45,11 +64,19 @@
       "vendor": "OpenAI",
       "homeBase": "userProfile",
       "home": ".codex",
-      "detect": ["config.toml"],
+      "detect": [
+        "config.toml"
+      ],
       "confidence": "verified+documented",
       "verified": "2026-09-26",
       "source": "openai/codex docs/config.md + rollout/src/lib.rs + 本机实测",
-      "neverTouch": ["config.toml", "auth.json", ".credentials.json", "history.jsonl", "AGENTS.md"],
+      "neverTouch": [
+        "config.toml",
+        "auth.json",
+        ".credentials.json",
+        "history.jsonl",
+        "AGENTS.md"
+      ],
       "items": [
         {
           "name": "Codex 会话",
@@ -58,7 +85,9 @@
           "desc": "Codex CLI 会话 rollout 记录，仅清理 30 天前的",
           "risk": "warn",
           "clean": "files",
-          "filesPatterns": ["*.jsonl"],
+          "filesPatterns": [
+            "*.jsonl"
+          ],
           "minAgeDays": 30,
           "recursive": true
         },
@@ -77,11 +106,28 @@
       "vendor": "Google",
       "homeBase": "userProfile",
       "home": ".gemini",
-      "detect": ["settings.json", "oauth_creds.json"],
+      "detect": [
+        "settings.json",
+        "oauth_creds.json"
+      ],
       "confidence": "documented",
       "verified": "2026-09-26",
       "source": "google-gemini/gemini-cli docs + packages/core/src/config/storage.ts",
-      "neverTouch": ["settings.json", "oauth_creds.json", "google_accounts.json", "trustedFolders.json", "mcp-oauth-tokens.json", "commands", "skills", "agents", "policies", "keybindings.json", "extensions", "installation_id", "bin"],
+      "neverTouch": [
+        "settings.json",
+        "oauth_creds.json",
+        "google_accounts.json",
+        "trustedFolders.json",
+        "mcp-oauth-tokens.json",
+        "commands",
+        "skills",
+        "agents",
+        "policies",
+        "keybindings.json",
+        "extensions",
+        "installation_id",
+        "bin"
+      ],
       "items": [
         {
           "name": "Gemini 会话临时目录",
@@ -90,7 +136,9 @@
           "desc": "按项目的会话数据（注意：含手动 /chat save 的保存点），仅清理 30 天前的",
           "risk": "warn",
           "clean": "files",
-          "filesPatterns": ["*"],
+          "filesPatterns": [
+            "*"
+          ],
           "minAgeDays": 30,
           "recursive": true
         },
@@ -101,7 +149,9 @@
           "desc": "checkpointing 影子 git 仓库，仅清理 30 天前的",
           "risk": "warn",
           "clean": "files",
-          "filesPatterns": ["*"],
+          "filesPatterns": [
+            "*"
+          ],
           "minAgeDays": 30,
           "recursive": true
         }
@@ -113,11 +163,19 @@
       "vendor": "Alibaba",
       "homeBase": "userProfile",
       "home": ".qwen",
-      "detect": ["settings.json"],
+      "detect": [
+        "settings.json"
+      ],
       "confidence": "inferred-fork",
       "verified": "2026-09-26",
       "source": "QwenLM/qwen-code（gemini-cli fork，布局镜像）",
-      "neverTouch": ["settings.json", "oauth_creds.json", "skills", "commands", "extensions"],
+      "neverTouch": [
+        "settings.json",
+        "oauth_creds.json",
+        "skills",
+        "commands",
+        "extensions"
+      ],
       "items": [
         {
           "name": "Qwen 会话临时目录",
@@ -126,7 +184,9 @@
           "desc": "按项目的会话数据（fork 布局推断），仅清理 30 天前的",
           "risk": "warn",
           "clean": "files",
-          "filesPatterns": ["*"],
+          "filesPatterns": [
+            "*"
+          ],
           "minAgeDays": 30,
           "recursive": true
         },
@@ -137,7 +197,9 @@
           "desc": "checkpointing 历史（fork 布局推断），仅清理 30 天前的",
           "risk": "warn",
           "clean": "files",
-          "filesPatterns": ["*"],
+          "filesPatterns": [
+            "*"
+          ],
           "minAgeDays": 30,
           "recursive": true
         }
@@ -149,11 +211,17 @@
       "vendor": "anomalyco",
       "homeBase": "userProfile",
       "home": ".local\\share\\opencode",
-      "detect": ["auth.json"],
+      "detect": [
+        "auth.json"
+      ],
       "confidence": "documented",
       "verified": "2026-09-26",
       "source": "opencode packages/web troubleshooting.mdx",
-      "neverTouch": ["auth.json", "project", "global"],
+      "neverTouch": [
+        "auth.json",
+        "project",
+        "global"
+      ],
       "items": [
         {
           "name": "OpenCode 日志",
@@ -170,11 +238,21 @@
       "vendor": "AWS",
       "homeBase": "userProfile",
       "home": ".aws\\amazonq",
-      "detect": ["mcp.json", "cli-agents"],
+      "detect": [
+        "mcp.json",
+        "cli-agents"
+      ],
       "confidence": "documented",
       "verified": "2026-09-26",
       "source": "aws/amazon-q-developer-cli crates/chat-cli/src/util/paths.rs + docs/agent-file-locations.md",
-      "neverTouch": ["mcp.json", "cli-agents", "prompts", "profiles", "knowledge_bases", "global_context.json"],
+      "neverTouch": [
+        "mcp.json",
+        "cli-agents",
+        "prompts",
+        "profiles",
+        "knowledge_bases",
+        "global_context.json"
+      ],
       "items": [
         {
           "name": "Amazon Q 检出缓存",
@@ -191,11 +269,16 @@
       "vendor": "Block",
       "homeBase": "appData",
       "home": "Block\\goose",
-      "detect": ["config.yaml"],
+      "detect": [
+        "config.yaml"
+      ],
       "confidence": "source-win-inferred",
       "verified": "2026-09-26",
       "source": "goose crates/goose/src/config/paths.rs（Windows 路径为 etcetera 策略推断）",
-      "neverTouch": ["config.yaml", "auth.json"],
+      "neverTouch": [
+        "config.yaml",
+        "auth.json"
+      ],
       "items": []
     },
     {
@@ -204,11 +287,15 @@
       "vendor": "Charm",
       "homeBase": "userProfile",
       "home": ".local\\share\\crush",
-      "detect": ["crush.json"],
+      "detect": [
+        "crush.json"
+      ],
       "confidence": "source",
       "verified": "2026-09-26",
       "source": "crush internal/home/home.go + internal/config/scope.go",
-      "neverTouch": ["crush.json"],
+      "neverTouch": [
+        "crush.json"
+      ],
       "items": []
     },
     {
@@ -217,11 +304,19 @@
       "vendor": "Alibaba",
       "homeBase": "userProfile",
       "home": ".lingma",
-      "detect": ["lingma_mcp.json"],
+      "detect": [
+        "lingma_mcp.json"
+      ],
       "confidence": "verified",
       "verified": "2026-09-26",
       "source": "本机实测",
-      "neverTouch": ["bin", "vscode", "model", "lingma_mcp.json", "extension"],
+      "neverTouch": [
+        "bin",
+        "vscode",
+        "model",
+        "lingma_mcp.json",
+        "extension"
+      ],
       "items": [
         {
           "name": "通义灵码 缓存",
@@ -252,11 +347,21 @@
       "vendor": "ByteDance",
       "homeBase": "userProfile",
       "home": ".marscode",
-      "detect": ["config.json", "deviceInfo.json"],
+      "detect": [
+        "config.json",
+        "deviceInfo.json"
+      ],
       "confidence": "verified",
       "verified": "2026-09-26",
       "source": "本机实测",
-      "neverTouch": ["ai-chat", "chat", "config.json", "deviceInfo.json", "vscode.mcp.config.json", ".agent"],
+      "neverTouch": [
+        "ai-chat",
+        "chat",
+        "config.json",
+        "deviceInfo.json",
+        "vscode.mcp.config.json",
+        ".agent"
+      ],
       "items": [
         {
           "name": "MarsCode 代码索引",
@@ -271,6 +376,317 @@
           "class": "cache",
           "desc": "MarsCode 运行日志",
           "risk": "safe"
+        }
+      ]
+    },
+    {
+      "id": "deepseek-harness",
+      "name": "DeepSeek Harness",
+      "vendor": "DeepSeek",
+      "homeBase": "userProfile",
+      "home": ".dsh",
+      "detect": [
+        "settings"
+      ],
+      "confidence": "documented",
+      "verified": "2026-09-26",
+      "source": "deepseek-ai/deepseek-harness packages/util/home-paths/src/index.ts（235k 星）",
+      "neverTouch": [
+        "settings",
+        "plugins"
+      ],
+      "items": [
+        {
+          "name": "DeepSeek Harness 会话",
+          "path": "sessions",
+          "class": "sessions",
+          "desc": "DeepSeek Harness 会话数据（project/session/generation 结构），仅清理 30 天前的",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": [
+            "*"
+          ],
+          "minAgeDays": 30,
+          "recursive": true
+        },
+        {
+          "name": "DeepSeek Harness 缓存",
+          "path": "cache",
+          "class": "cache",
+          "desc": "缓存目录（含 cache/models），可清理",
+          "risk": "safe"
+        }
+      ]
+    },
+    {
+      "id": "zed",
+      "name": "Zed",
+      "vendor": "Zed Industries",
+      "homeBase": "localAppData",
+      "home": "Zed",
+      "detect": [
+        "data"
+      ],
+      "confidence": "documented",
+      "verified": "2026-09-26",
+      "source": "zed-industries/zed crates/paths/src/paths.rs + docs/src/uninstall.md（90k 星）",
+      "neverTouch": [
+        "db",
+        "extensions"
+      ],
+      "items": [
+        {
+          "name": "Zed 日志",
+          "path": "logs",
+          "class": "cache",
+          "desc": "Zed 运行日志",
+          "risk": "safe"
+        },
+        {
+          "name": "Zed Agent 会话数据库",
+          "path": "threads",
+          "class": "sessions",
+          "desc": "Agent 会话 SQLite 数据库（threads.db），只读报告：删除将丢失会话历史",
+          "risk": "warn",
+          "clean": "reportOnly"
+        }
+      ]
+    },
+    {
+      "id": "cline",
+      "name": "Cline",
+      "vendor": "Cline",
+      "homeBase": "appData",
+      "home": "Code\\User\\globalStorage\\saoudrizwan.claude-dev",
+      "detect": [
+        "tasks"
+      ],
+      "confidence": "documented",
+      "verified": "2026-09-26",
+      "source": "cline/cline apps/vscode/src/utils/storage.ts（69k 星）",
+      "neverTouch": [
+        "mcp_settings.json"
+      ],
+      "items": [
+        {
+          "name": "Cline 任务数据",
+          "path": "tasks",
+          "class": "sessions",
+          "desc": "Cline 任务对话与 API 历史，仅清理 30 天前的旧任务",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": [
+            "*"
+          ],
+          "minAgeDays": 30,
+          "recursive": true
+        },
+        {
+          "name": "Cline 检查点",
+          "path": "checkpoints",
+          "class": "cache",
+          "desc": "影子 git 检查点快照，删除后将无法回滚到历史检查点（当前文件不受影响）",
+          "risk": "safe"
+        }
+      ]
+    },
+    {
+      "id": "copilot-cli",
+      "name": "GitHub Copilot CLI",
+      "vendor": "GitHub",
+      "homeBase": "userProfile",
+      "home": ".copilot",
+      "detect": [
+        "skills"
+      ],
+      "confidence": "documented",
+      "verified": "2026-09-26",
+      "source": "Microsoft Learn agent-skills 文档 + 第三方 sessionlog 读取器源码",
+      "neverTouch": [
+        "skills",
+        "config.json",
+        "mcp-config.json"
+      ],
+      "items": [
+        {
+          "name": "Copilot CLI 会话状态",
+          "path": "session-state",
+          "class": "sessions",
+          "desc": "会话事件日志（events.jsonl），仅清理 30 天前的",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": [
+            "*.jsonl"
+          ],
+          "minAgeDays": 30
+        }
+      ]
+    },
+    {
+      "id": "amp",
+      "name": "Amp",
+      "vendor": "Sourcegraph",
+      "homeBase": "userProfile",
+      "home": ".local\\share\\amp",
+      "detect": [
+        "threads"
+      ],
+      "confidence": "inferred-win",
+      "verified": "2026-09-26",
+      "source": "ampcode.com/docs/cli/settings + docs/threads（Windows 路径为推断，本地+云端同步）",
+      "neverTouch": [],
+      "items": [
+        {
+          "name": "Amp 线程数据",
+          "path": "threads",
+          "class": "sessions",
+          "desc": "Amp 线程数据（本地+云端同步，只读报告）：用官方 amp threads delete 管理",
+          "risk": "warn",
+          "clean": "reportOnly"
+        }
+      ]
+    },
+    {
+      "id": "droid",
+      "name": "Factory Droid",
+      "vendor": "Factory",
+      "homeBase": "userProfile",
+      "home": ".factory",
+      "detect": [
+        "sessions"
+      ],
+      "confidence": "documented",
+      "verified": "2026-09-26",
+      "source": "Factory-AI/factory-plugins plugins/core/skills/session-navigation/SKILL.md",
+      "neverTouch": [
+        "settings.json",
+        "mcp.json"
+      ],
+      "items": [
+        {
+          "name": "Factory Droid 会话",
+          "path": "sessions",
+          "class": "sessions",
+          "desc": "Droid 会话记录（<uuid>.jsonl），仅清理 30 天前的",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": [
+            "*.jsonl"
+          ],
+          "minAgeDays": 30,
+          "recursive": true
+        }
+      ]
+    },
+    {
+      "id": "codebuddy",
+      "name": "CodeBuddy CLI",
+      "vendor": "Tencent",
+      "homeBase": "userProfile",
+      "home": ".codebuddy",
+      "detect": [
+        "settings.json"
+      ],
+      "confidence": "documented",
+      "verified": "2026-09-26",
+      "source": "codebuddy.cn/docs/cli/codebuddy-dir（官方目录文档，最完整）",
+      "neverTouch": [
+        "settings.json",
+        "settings.local.json",
+        "CODEBUDDY.md",
+        "mcp.json",
+        "memories",
+        "agents",
+        "rules",
+        "skills"
+      ],
+      "items": [
+        {
+          "name": "CodeBuddy 日志",
+          "path": "logs",
+          "class": "cache",
+          "desc": "CodeBuddy 运行日志（官方归类为可清理运行时）",
+          "risk": "safe"
+        },
+        {
+          "name": "CodeBuddy 追踪数据",
+          "path": "traces",
+          "class": "cache",
+          "desc": "CodeBuddy 追踪数据（官方归类为可清理运行时）",
+          "risk": "safe"
+        },
+        {
+          "name": "CodeBuddy Shell 快照",
+          "path": "shell-snapshots",
+          "class": "cache",
+          "desc": "CodeBuddy shell 环境快照，可再生成",
+          "risk": "safe"
+        },
+        {
+          "name": "CodeBuddy 文件历史",
+          "path": "file-history",
+          "class": "cache",
+          "desc": "文件编辑历史（官方归类为可清理运行时）",
+          "risk": "safe"
+        },
+        {
+          "name": "CodeBuddy 会话转录",
+          "path": "projects",
+          "class": "sessions",
+          "desc": "会话转录与工具结果，仅清理 30 天前的；配置/记忆/技能绝不触碰",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": [
+            "*"
+          ],
+          "minAgeDays": 30,
+          "recursive": true
+        }
+      ]
+    },
+    {
+      "id": "pi",
+      "name": "pi",
+      "vendor": "earendil-works",
+      "homeBase": "userProfile",
+      "home": ".pi\\agent",
+      "detect": [
+        "settings.json",
+        "sessions"
+      ],
+      "confidence": "documented",
+      "verified": "2026-09-26",
+      "source": "earendil-works/pi packages/coding-agent/docs/configuration.md（109k 星）+ 本机实测",
+      "neverTouch": [
+        "settings.json",
+        "auth.json",
+        "AGENTS.md",
+        "SYSTEM.md",
+        "keybindings.json",
+        "models.json",
+        "mcp.json",
+        "mcp-cache.json",
+        "trust.json",
+        "extensions",
+        "skills",
+        "prompts",
+        "themes",
+        "bin",
+        "npm"
+      ],
+      "items": [
+        {
+          "name": "pi 会话",
+          "path": "sessions",
+          "class": "sessions",
+          "desc": "pi 会话记录（<encoded-cwd>/*.jsonl），仅清理 30 天前的；npm 子目录为运行时依赖不触碰",
+          "risk": "warn",
+          "clean": "files",
+          "filesPatterns": [
+            "*.jsonl"
+          ],
+          "minAgeDays": 30,
+          "recursive": true
         }
       ]
     }

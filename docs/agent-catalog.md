@@ -2,6 +2,8 @@
 
 > ✅ 状态：已实施（2026-09-26，随 v4.1 发布）。落地形态：`agents.catalog.json`（10 个 agent / 16 条编译条目，内嵌资源）+ `AgentCatalog.cs`（加载与编译器，条目编译为现有规则字段，同名以先前来源优先）+ `ScanUnknownAgentHomes` 未收录探测器（家目录 dot-dir ≥200MB 且未被覆盖 → 「未收录工具目录」只报告不清理）。`rules.default.json` 中 8 条 agent 规则已迁入目录（67 + 16 = 83 条生效规则）。
 >
+> ✅ 扩充（2026-09-26，随 v4.3 发布）：目录扩至 **18 个 agent / 31 条编译条目**，新增 DeepSeek Harness（`~/.dsh`，235k★，`DSH_HOME` 可重定向）、Zed（LOCALAPPDATA 数据 + APPDATA 配置双目录，threads.db 会话库 reportOnly）、Cline（globalStorage 的 tasks 超龄 + checkpoints 影子 git）、GitHub Copilot CLI（`~/.copilot/session-state`）、Amp（threads 云同步，reportOnly）、Factory Droid（`~/.factory/sessions`）、CodeBuddy CLI（官方目录文档最完整，logs/traces/shell-snapshots/file-history Safe + projects 超龄，另有官方 `project purge`）、pi（`~/.pi/agent/sessions` 超龄；`npm` 子目录为运行时依赖不触碰）。全部经源码/官方文档核实（75 次 GitHub 查询）；iFlow CLI 因 2026-04 已停服未收录，Aider 因项目级缓存不契合 home 模型未收录。
+>
 > ✅ IDE 覆盖说明（v4.2 补充）：IDE 系不进本目录（home 模型不适用），按三类机制覆盖——① JetBrains 全家桶走专用扫描器（`%LOCALAPPDATA%\JetBrains\<Product><版本>` 为系统/缓存目录，多产品多版本逐项生成，旧版本可整体清理）；② VS Code 系（含 Windsurf）走 Electron 子目录扫描器 + 专项规则（Copilot Chat 数据 reportOnly、C++ ipch 缓存）；③ ZCode 等桌面 AI 客户端按实测结构收录（remote-assets-cache Safe、session 数据 reportOnly）。
 >
 > 分析日期：2026-09-26 · 依据：10 个主流 agent 的源码/官方文档核实（GitHub 38 次查询）+ 本机 7 个 agent 实测 + 社区案例
