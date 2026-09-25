@@ -129,7 +129,9 @@ ISCC setup.iss
 
 ## 📸 截图
 
-*(待补充)*
+| 主界面 | 扫描完成（76 项 · 按大小降序 · 三级风险标注） |
+|---|---|
+| ![主界面](docs/screenshots/main.png) | ![扫描结果](docs/screenshots/scan.png) |
 
 ## 📄 许可证
 
