@@ -2,6 +2,8 @@
 
 > ✅ 状态：已实施（2026-09-26，随 v4.1 发布）。落地形态：`agents.catalog.json`（10 个 agent / 16 条编译条目，内嵌资源）+ `AgentCatalog.cs`（加载与编译器，条目编译为现有规则字段，同名以先前来源优先）+ `ScanUnknownAgentHomes` 未收录探测器（家目录 dot-dir ≥200MB 且未被覆盖 → 「未收录工具目录」只报告不清理）。`rules.default.json` 中 8 条 agent 规则已迁入目录（67 + 16 = 83 条生效规则）。
 >
+> ✅ IDE 覆盖说明（v4.2 补充）：IDE 系不进本目录（home 模型不适用），按三类机制覆盖——① JetBrains 全家桶走专用扫描器（`%LOCALAPPDATA%\JetBrains\<Product><版本>` 为系统/缓存目录，多产品多版本逐项生成，旧版本可整体清理）；② VS Code 系（含 Windsurf）走 Electron 子目录扫描器 + 专项规则（Copilot Chat 数据 reportOnly、C++ ipch 缓存）；③ ZCode 等桌面 AI 客户端按实测结构收录（remote-assets-cache Safe、session 数据 reportOnly）。
+>
 > 分析日期：2026-09-26 · 依据：10 个主流 agent 的源码/官方文档核实（GitHub 38 次查询）+ 本机 7 个 agent 实测 + 社区案例
 > 结论先行：**可行，且建议做**。数据来源可靠（10 个主流 agent 中 8 个有官方文档或源码级证据）、规则引擎已具备全部所需能力（零新引擎代码）、维护模型可自洽（置信分级 + 存在性隐藏 + 侧车修正）。主要风险是布局漂移与语义误判，均有成熟缓解手段。
 

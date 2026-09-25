@@ -33,6 +33,7 @@
 | 🐳 **Docker/WSL 再生性清理** | `docker system prune` 按 df 差值计释放；vhdx 虚拟磁盘 `diskpart compact` 离线压缩——只回收空白，不碰数据 |
 | 🤖 **Agent 规则包** | Claude/通义灵码/MarsCode 的会话转录超龄清理（配置与凭证绝不碰）；`pnpm store prune`、`go clean -modcache` 官方命令集成；Ollama/HuggingFace 模型库只读报告；增长分析内置迁盘顾问 |
 | 🗂️ **Agent 目录与探测器** | 10 个主流 agent 的收录清单（`agents.catalog.json`，含探测签名/neverTouch/置信分级/核实日期），Gemini/Qwen/OpenCode/Amazon Q/Goose/Crush 等自动生效；家目录下**未收录**的大体积工具目录以「只报告不清理」方式列出——已知全自动，未知看得见 |
+| 🏢 **IDE 与内置 AI** | JetBrains 全家桶系统缓存（多产品多版本，旧版本整体清理）、VS Code C++ ipch 缓存、Copilot Chat 会话数据（只读报告）、Windsurf 进 Electron 扫描、ZCode 等桌面 AI 客户端按实测结构收录 |
 | 🌍 **通用性** | 系统盘符运行时推导（Windows 不在 C 盘同样可用）；中英文系统输出与小数逗号 locale 兼容；Conda 安装位置动态发现 |
 
 ## 🚀 快速开始
@@ -111,6 +112,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 | v3.9 | 体验 | 预览模式、设置持久化、Docker/WSL 再生性清理 |
 | v4.0 | Agent 时代 | Agent dot-home 规则包、官方 prune 命令集成、模型仓库报告、迁盘顾问 |
 | v4.1 | Agent 目录 | 10 个 agent 收录清单（签名探测/置信分级/neverTouch）+ 未收录探测器 |
+| v4.2 | IDE 与内置 AI | JetBrains 系统缓存扫描器、C++ ipch/Copilot Chat 规则、Windsurf/ZCode 收录 |
 
 ## 🛠️ 技术栈与构建
 

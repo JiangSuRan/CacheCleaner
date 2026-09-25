@@ -170,6 +170,36 @@
     "risk": "safe"
   },
   {
+    "name": "ZCode 远程资源缓存",
+    "base": "appData",
+    "path": "ZCode\\remote-assets-cache",
+    "desc": "ZCode 桌面端下载的远程资源缓存，清理后按需重新下载",
+    "risk": "safe"
+  },
+  {
+    "name": "ZCode 会话数据",
+    "base": "appData",
+    "path": "ZCode\\session",
+    "desc": "ZCode 会话数据（对话记录，只读报告）：确认不需要历史会话后手动清理",
+    "risk": "warn",
+    "clean": "reportOnly"
+  },
+  {
+    "name": "VS Code Copilot Chat 数据",
+    "base": "appData",
+    "path": "Code\\User\\globalStorage\\github.copilot-chat",
+    "desc": "VS Code 内置 AI（Copilot Chat）的会话数据（只读报告）：删除将丢失聊天历史",
+    "risk": "warn",
+    "clean": "reportOnly"
+  },
+  {
+    "name": "C++ 智能感知缓存",
+    "base": "localAppData",
+    "path": "Microsoft\\vscode-cpptools",
+    "desc": "VS Code C++ 扩展的 ipch 智能感知缓存（大型项目可达数 GB），清理后重建",
+    "risk": "safe"
+  },
+  {
     "name": "bilibili 缓存",
     "base": "appData",
     "path": "bilibili\\Cache",

@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <!-- 版本号与 MainForm 标题 / setup.iss 保持同步，否则 exe 文件属性停留在默认 1.0.0 -->
-    <Version>4.1.0</Version>
+    <Version>4.2.0</Version>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>

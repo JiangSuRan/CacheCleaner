@@ -331,6 +331,9 @@ public static class CacheScanner
         // UWP 应用包安全缓存族（AC\INetCache / AC\Temp / TempState）
         ScanUwpCacheFamilies(items, ctx, progress, ref current, ref total, cancellationToken);
 
+        // JetBrains 全家桶系统缓存（多产品多版本）
+        ScanJetBrains(items, ctx, progress, ref current, ref total, cancellationToken);
+
         // AI CLI 自更新遗留的旧版本目录（保留最新）
         ScanCodexOldVersions(items, ctx, progress, ref current, ref total, cancellationToken);
 
@@ -1377,6 +1380,7 @@ public static class CacheScanner
             ("Positron", "Positron", false),
             ("CherryStudio", "CherryStudio", false),
             ("Claude", "Claude Desktop", false),
+            ("Windsurf", "Windsurf", false),
             ("LarkShell", "飞书", true),
         ];
 
@@ -2584,7 +2588,61 @@ public static class CacheScanner
     }
 
     /// <summary>
-    /// 检查某个进程名是否正在运行（规则 guardProcesses 的检查原语）
+    /// JetBrains 全家桶：%LOCALAPPDATA%\JetBrains\&lt;Product&gt;&lt;版本&gt;\ 为系统/缓存目录
+    /// （config 与插件在 Roaming，不受影响）。每个产品-版本目录生成一个安全清理项，
+    /// 旧版本目录整体可清（Desc 中标注），当前版本清空后首次启动重建缓存。
+    /// </summary>
+    private static void ScanJetBrains(
+        List<CacheItem> items,
+        ScanContext ctx,
+        IProgress<(int current, int total, string name)>? progress,
+        ref int current,
+        ref int total,
+        CancellationToken cancellationToken)
+    {
+        var root = Path.Combine(ctx.LocalAppData, "JetBrains");
+        if (!Directory.Exists(root)) return;
+
+        try
+        {
+            foreach (var productDir in Directory.GetDirectories(root))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                long size = SumFiles(productDir);
+                if (size < MinProfileCacheSize) continue;
+
+                var name = Path.GetFileName(productDir);
+                total++;
+                current++;
+                progress?.Report((current, total, $"JetBrains {name}"));
+
+                // 同名产品的新版本目录存在时，当前目录即旧版本（可整体清理）
+                var baseName = Regex.Replace(name, @"20\d{2}\.\d$", "");
+                bool isOld = Directory.GetDirectories(root)
+                    .Any(d => Path.GetFileName(d).StartsWith(baseName, StringComparison.OrdinalIgnoreCase)
+                              && string.CompareOrdinal(Path.GetFileName(d), name) > 0);
+
+                items.Add(new CacheItem
+                {
+                    Name = $"JetBrains {name} 系统缓存",
+                    Path = productDir,
+                    Desc = isOld
+                        ? "旧版本的系统缓存/索引目录，整体清理后不影响新版使用"
+                        : "系统缓存/索引目录（config 在 Roaming 不受影响），清理后首次启动重建",
+                    Risk = RiskLevel.Safe,
+                    Exists = true,
+                    SizeBytes = size
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"扫描 JetBrains 缓存失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 检查给定进程名是否正在运行（规则 guardProcesses 的检查原语）
     /// </summary>
     private static bool HasRunningProcess(string processName)
     {
