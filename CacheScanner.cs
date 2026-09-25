@@ -151,125 +151,9 @@ public static class CacheScanner
     // 合法的 pip 缓存路径特征
     private static readonly string[] ValidPipCacheKeywords = ["pip", "cache", "pypa"];
 
-    /// <summary>
-    /// 已知缓存定义：名称、相对路径、说明、风险等级、基准目录
-    /// pip 的相对路径留空，扫描时通过命令获取实际路径
-    /// </summary>
-    private static readonly (string Name, string RelativePath, string Desc, RiskLevel Risk, BaseFolder Base)[] KnownCaches =
-    [
-        // Python 相关
-        ("pip 缓存", "", "Python 包管理器缓存，清理后不影响已安装的包", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("uv 缓存", @"uv\cache", "Python uv 包管理器缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
-
-        // Node.js 相关
-        ("npm 缓存", @"npm-cache", "Node.js 包管理器缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("pnpm 缓存", @"pnpm-cache", "pnpm 包管理器缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("pnpm store", @"pnpm\store", "pnpm 内容寻址包存储，清理后按需重新下载", RiskLevel.Safe, BaseFolder.LocalAppData),
-
-        // IDE / 编辑器（Cache/CachedData/VSIX 等缓存子目录统一由 ScanElectronApps 扫描，此处保留日志与工作区状态）
-        ("VS Code 日志", @"Code\logs", "VS Code 日志文件", RiskLevel.Safe, BaseFolder.AppData),
-        ("RStudio 缓存", @"RStudio\cache", "RStudio 缓存（仅 cache 子目录）", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("RStudio 日志", @"RStudio\log", "RStudio 日志文件", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("VS Code 工作区状态", @"Code\User\workspaceStorage", "VS Code 工作区界面状态，清理后各工作区状态重置", RiskLevel.Warn, BaseFolder.AppData),
-        ("Cursor 工作区状态", @"Cursor\User\workspaceStorage", "Cursor 工作区界面状态，清理后各工作区状态重置", RiskLevel.Warn, BaseFolder.AppData),
-        ("Positron 工作区状态", @"Positron\User\workspaceStorage", "Positron 工作区界面状态，清理后各工作区状态重置", RiskLevel.Warn, BaseFolder.AppData),
-
-        // 下载工具
-        ("迅雷缓存", @"Thunder Network", "迅雷下载缓存", RiskLevel.Warn, BaseFolder.LocalAppData),
-
-        // 视频/图片工具
-        ("剪映缓存", @"JianyingPro\User Data\Cache", "剪映视频编辑缓存", RiskLevel.Warn, BaseFolder.LocalAppData),
-
-        // 浏览器缓存
-        ("Edge 缓存", @"Microsoft\Edge\User Data\Default\Cache", "Edge 浏览器缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("Chrome 缓存", @"Google\Chrome\User Data\Default\Cache", "Chrome 浏览器缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
-
-        // Windows 系统缓存
-        ("Windows 临时文件", @"Temp", "Windows 临时文件（仅清理超过7天的）", RiskLevel.Warn, BaseFolder.LocalAppData),
-        ("Windows 缩略图缓存", @"Microsoft\Windows\Explorer", "资源管理器缩略图与图标缓存（thumbcache_*/iconcache_*）", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("Windows 预读取", @"Prefetch", "Windows 程序预读取缓存", RiskLevel.Safe, BaseFolder.Windows),
-
-        // AI 编辑器（缓存子目录统一由 ScanElectronApps 扫描）
-        ("Cursor 日志", @"Cursor\logs", "Cursor AI 编辑器日志", RiskLevel.Safe, BaseFolder.AppData),
-        ("Trae CN 日志", @"Trae CN\logs", "字节跳动 Trae IDE 日志", RiskLevel.Safe, BaseFolder.AppData),
-        ("Copilot 缓存", @"copilot", "GitHub Copilot 插件缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
-
-        // 视频/娱乐
-        ("bilibili 缓存", @"bilibili\Cache", "哔哩哔哩客户端缓存", RiskLevel.Safe, BaseFolder.AppData),
-        ("bilibili 日志", @"bilibili\logs", "哔哩哔哩客户端日志", RiskLevel.Safe, BaseFolder.AppData),
-
-        // 文档/翻译
-        ("Obsidian 缓存", @"obsidian\Cache", "Obsidian 笔记缓存", RiskLevel.Safe, BaseFolder.AppData),
-        ("百度翻译缓存", @"BdTranslateClient\Cache", "百度翻译客户端缓存", RiskLevel.Safe, BaseFolder.AppData),
-        ("doc2x 缓存", @"doc2x\Cache", "doc2x 文档转换缓存", RiskLevel.Safe, BaseFolder.AppData),
-
-        // 开发工具
-        ("NuGet 包缓存", @".nuget\packages", ".NET NuGet 包缓存", RiskLevel.Safe, BaseFolder.UserProfile),
-        ("NuGet HTTP 缓存", @"NuGet\v3-cache", "NuGet HTTP 缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("R 编译缓存", @"R\cache", "R 包编译缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("node-gyp 缓存", @"node-gyp\Cache", "Node.js 原生模块编译缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
-
-        // 系统缓存
-        ("D3D 着色器缓存", @"D3DSCache", "Direct3D 着色器缓存，清理后自动重建", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("NVIDIA 着色器缓存", @"NVIDIA\DXCache", "NVIDIA DirectX 着色器缓存，清理后自动重建", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("NVIDIA OpenGL 缓存", @"NVIDIA\GLCache", "NVIDIA OpenGL 着色器缓存，清理后自动重建", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("AMD 着色器缓存", @"AMD\DxCache", "AMD DirectX 着色器缓存，清理后自动重建", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("AMD Dxc 着色器缓存", @"AMD\DxcCache", "AMD DXC 着色器缓存，清理后自动重建", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("Intel 着色器缓存", @"Intel\ShaderCache", "Intel GPU 着色器缓存，清理后自动重建", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("崩溃转储", @"CrashDumps", "应用程序崩溃转储文件", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("PowerToys 更新缓存", @"Microsoft\PowerToys\Updates", "PowerToys 更新包", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("Electron 安装临时文件", @"SquirrelTemp", "Electron 应用安装临时文件", RiskLevel.Safe, BaseFolder.LocalAppData),
-        ("腾讯日志", @"Tencent\Logs", "腾讯软件日志文件", RiskLevel.Safe, BaseFolder.AppData),
-        ("微信小程序运行时", @"Tencent\WeChat\XPlugin", "微信3.x 小程序运行时组件，清理后首次使用小程序需重新下载", RiskLevel.Warn, BaseFolder.AppData),
-        ("微信4.0 日志", @"Tencent\xwechat\log", "微信4.0 运行日志", RiskLevel.Safe, BaseFolder.AppData),
-        ("微信4.0 更新包", @"Tencent\xwechat\update", "微信4.0 已下载的更新安装包", RiskLevel.Safe, BaseFolder.AppData),
-        ("微信4.0 小程序运行时", @"Tencent\xwechat\xplugin", "微信4.0 小程序运行时组件，清理后首次使用小程序需重新下载", RiskLevel.Warn, BaseFolder.AppData),
-        ("微信输入法安装包", @"Tencent\WeType\setup", "微信输入法下载的安装包缓存，更新时重新下载", RiskLevel.Warn, BaseFolder.AppData),
-        ("GitHub Desktop 更新包", @"GitHubDesktop\packages", "GitHub Desktop 更新包缓存", RiskLevel.Safe, BaseFolder.LocalAppData),
-
-        // Docker（高风险）
-        ("Docker 镜像/容器", @"Docker", "Docker Desktop 所有数据（镜像+容器+卷）", RiskLevel.Danger, BaseFolder.LocalAppData),
-
-        // === 系统级缓存（P0-3 新增，需管理员权限才能真正清理）===
-        // Windows 更新 / 传递优化
-        ("Windows 更新下载缓存", @"SoftwareDistribution\Download", "Windows Update 下载缓存（自动停启 wuauserv/bits）", RiskLevel.Safe, BaseFolder.Windows),
-        ("Delivery Optimization 缓存", @"SoftwareDistribution\DeliveryOptimization", "Windows 传递优化缓存（官方 cmdlet 清理）", RiskLevel.Safe, BaseFolder.Windows),
-
-        // 系统临时（C:\Windows\Temp，复用 CleanTempFiles 的 7 天规则）
-        ("系统临时文件", @"Temp", "系统临时文件（仅清理超过 7 天的）", RiskLevel.Warn, BaseFolder.Windows),
-
-        // Windows 错误报告（位于 ProgramData，由 AllowedSystemPaths 白名单放行）
-        ("Windows 错误报告归档", @"Microsoft\Windows\WER\ReportArchive", "Windows 错误报告归档", RiskLevel.Safe, BaseFolder.ProgramData),
-        ("Windows 错误报告队列", @"Microsoft\Windows\WER\ReportQueue", "Windows 错误报告队列", RiskLevel.Safe, BaseFolder.ProgramData),
-        ("VS 安装缓存", @"Package Cache", "Visual Studio 安装包缓存（只读报告：删除会破坏修复/卸载）", RiskLevel.Warn, BaseFolder.ProgramData),
-        ("CBS 服务日志", @"Logs\CBS", "Windows 组件服务日志（CbsPersist_*），仅清理 30 天前的", RiskLevel.Warn, BaseFolder.Windows),
-
-        // 崩溃转储（系统级）
-        ("系统崩溃转储", @"Minidump", "系统蓝屏/崩溃 minidump 文件", RiskLevel.Warn, BaseFolder.Windows),
-        ("内核崩溃报告", @"LiveKernelReports", "Windows 实时内核崩溃报告", RiskLevel.Warn, BaseFolder.Windows),
-        ("系统内存转储", @"Memory.dmp", "系统内存转储文件（蓝屏后可能数 GB）", RiskLevel.Warn, BaseFolder.Windows),
-
-        // 音乐/视频客户端缓存（常见空间大头，原名即 Cache，安全清理后自动重建）
-        ("汽水音乐缓存", @"SodaMusic\LunaCacheV2", "汽水音乐播放缓存，清理后自动重建", RiskLevel.Safe, BaseFolder.AppData),
-
-        // 用户主目录下的 CLI 工具缓存（点开头目录，自动发现原本会漏掉）
-        ("CLI 工具缓存根", @".cache", "通用 CLI 工具缓存（codex-runtimes/babeldoc/chroma 等）", RiskLevel.Safe, BaseFolder.UserProfile),
-        ("Codex 临时文件", @".codex\.tmp", "OpenAI Codex CLI 临时文件", RiskLevel.Safe, BaseFolder.UserProfile),
-
-        // DNS 缓存（命令式清理，无目录路径）
-        ("DNS 解析缓存", "", "DNS 解析缓存，执行 ipconfig /flushdns", RiskLevel.Safe, BaseFolder.LocalAppData),
-
-        // === 系统级空间大头（P0：常规缓存清理工具的典型盲区）===
-        // 回收站位于盘根，不在任何用户目录下，走 DriveRoot 基准 + AllowedSystemPaths 白名单
-        ("回收站", @"$Recycle.Bin", "回收站中已删除的文件，清空后不可恢复", RiskLevel.Safe, BaseFolder.DriveRoot),
-        ("Windows 升级残留", "", "Windows.old/$GetCurrent/ESD 升级残留，走 cleanmgr /autoclean，执行后无法回滚旧版本", RiskLevel.Warn, BaseFolder.DriveRoot),
-
-        // 还原点（卷影副本）：vssadmin 查询实际占用，清理 = 把上限缩减到 3GB（保留最新还原点）
-        ("系统还原点（卷影副本）", "", "卷影副本占用，清理 = 缩减上限到 3GB（保留最新还原点）", RiskLevel.Warn, BaseFolder.LocalAppData),
-
-        // WinSxS：硬链接导致资源管理器显示体积虚高，全量统计极慢；仅提供 DISM 清理入口
-        ("Windows 组件存储 (WinSxS)", @"WinSxS", "组件存储，DISM 清理被取代的旧组件（15-30 分钟）", RiskLevel.Warn, BaseFolder.Windows),
-    ];
+    // 声明式清理规则已外置：默认规则见 rules.default.json（内嵌资源），
+    // 支持 exe 同目录 / %LOCALAPPDATA%\CacheCleaner\rules.user.json 侧车增改，无需重新编译。
+    // kind=special 的特殊项（pip/DNS/还原点/升级残留）在 ScanAll 与 CleanItem 中按名称分发。
 
     /// <summary>
     /// 扫描所有缓存，返回列表
@@ -281,143 +165,131 @@ public static class CacheScanner
         var items = new List<CacheItem>();
         var ctx = new ScanContext();
         var condaCandidates = GetCondaPkgsCandidates();
-        int total = KnownCaches.Length + condaCandidates.Count;
+        int total = CleaningRules.All.Count + condaCandidates.Count;
         int current = 0;
 
-        foreach (var (name, relativePath, desc, risk, baseFolder) in KnownCaches)
+        foreach (var rule in CleaningRules.All)
         {
             cancellationToken.ThrowIfCancellationRequested();
             current++;
-            progress?.Report((current, total, name));
+            progress?.Report((current, total, rule.Name));
 
             var item = new CacheItem
             {
-                Name = name,
-                Desc = desc,
-                Risk = risk
+                Name = rule.Name,
+                Desc = rule.Desc,
+                Risk = rule.Risk
             };
 
             try
             {
-                // pip 特殊处理：通过命令获取缓存路径
-                if (name == "pip 缓存")
+                // 特殊项：无法用「基准目录+相对路径」表达（外部命令/动态解析），按名称分发
+                if (rule.Kind == "special")
                 {
-                    var pipPath = ResolvePipCache();
-                    if (pipPath != null)
+                    switch (rule.Name)
                     {
-                        item.Path = pipPath;
-                        item.Exists = Directory.Exists(pipPath);
-                        if (item.Exists) item.SizeBytes = SumFiles(pipPath);
+                        case "pip 缓存":
+                        {
+                            var pipPath = ResolvePipCache();
+                            if (pipPath != null)
+                            {
+                                item.Path = pipPath;
+                                item.Exists = Directory.Exists(pipPath);
+                                if (item.Exists) item.SizeBytes = SumFiles(pipPath);
+                            }
+                            break;
+                        }
+                        case "DNS 解析缓存":
+                            item.Path = "（命令式清理）";
+                            item.Exists = true;
+                            break;
+                        case "系统还原点（卷影副本）":
+                        {
+                            var (usedBytes, ok) = QueryShadowStorageUsed();
+                            item.Path = "（命令式清理）";
+                            item.Exists = ok;
+                            item.SizeBytes = usedBytes;
+                            break;
+                        }
+                        case "Windows 升级残留":
+                        {
+                            long remnantBytes = 0;
+                            foreach (var remnant in new[]
+                                     {
+                                         Path.Combine(SysRoot, "Windows.old"),
+                                         Path.Combine(SysRoot, "$GetCurrent"),
+                                         Path.Combine(SysRoot, "ESD")
+                                     })
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
+                                if (Directory.Exists(remnant)) remnantBytes += SumFiles(remnant);
+                            }
+                            item.Path = "（命令式清理）";
+                            item.Exists = remnantBytes > 0;
+                            item.SizeBytes = remnantBytes;
+                            break;
+                        }
                     }
-                    else
+
+                    items.Add(item);
+                    continue;
+                }
+
+                // 通用解析：目录（path）与单文件（file）两类。
+                // file 类型不走 ResolvePath——其中的目录存在性预检会误杀文件路径。
+                string? resolved;
+                if (rule.Kind == "file")
+                {
+                    resolved = rule.Base switch
                     {
-                        item.Path = "";
-                    }
-                    items.Add(item);
-                    continue;
-                }
-
-                // 系统内存转储是单文件（C:\Windows\Memory.dmp，非目录），单独扫描
-                if (name == "系统内存转储")
-                {
-                    var dmpPath = Path.Combine(ctx.WindowsDir, "Memory.dmp");
-                    item.Path = dmpPath;
-                    item.Exists = File.Exists(dmpPath);
-                    if (item.Exists)
-                    {
-                        try { item.SizeBytes = new FileInfo(dmpPath).Length; } catch { }
-                    }
-                    items.Add(item);
-                    continue;
-                }
-
-                // DNS 缓存为命令式清理（ipconfig /flushdns），无目录路径，不可走通用解析
-                if (name == "DNS 解析缓存")
-                {
-                    item.Path = "（命令式清理）";
-                    item.Exists = true;
-                    items.Add(item);
-                    continue;
-                }
-
-                // 回收站：SumFiles 对隐藏+系统属性目录可正常统计（本程序以管理员运行）
-                if (name == "回收站")
-                {
-                    item.Path = Path.Combine(SysRoot, relativePath);
-                    item.Exists = Directory.Exists(item.Path);
-                    if (item.Exists) item.SizeBytes = SumFiles(item.Path);
-                    items.Add(item);
-                    continue;
-                }
-
-                // 系统还原点：命令式扫描（vssadmin list shadowstorage 解析实际占用），清理为缩减上限
-                if (name == "系统还原点（卷影副本）")
-                {
-                    var (usedBytes, ok) = QueryShadowStorageUsed();
-                    item.Path = "（命令式清理）";
-                    item.Exists = ok;
-                    item.SizeBytes = usedBytes;
-                    items.Add(item);
-                    continue;
-                }
-
-                // WinSxS：硬链接重复计数导致统计值虚高，且全量遍历极慢——跳过统计，仅提供清理入口
-                if (name == "Windows 组件存储 (WinSxS)")
-                {
-                    item.Path = Path.Combine(ctx.WindowsDir, relativePath);
-                    item.Exists = Directory.Exists(item.Path);
-                    item.SizeBytes = 0;
-                    items.Add(item);
-                    continue;
-                }
-
-                // Windows 升级残留：三处常见位置合并报告，清理走 cleanmgr /autoclean
-                if (name == "Windows 升级残留")
-                {
-                    long remnantBytes = 0;
-                    foreach (var remnant in new[]
-                             {
-                                 Path.Combine(SysRoot, "Windows.old"),
-                                 Path.Combine(SysRoot, "$GetCurrent"),
-                                 Path.Combine(SysRoot, "ESD")
-                             })
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        if (Directory.Exists(remnant)) remnantBytes += SumFiles(remnant);
-                    }
-                    item.Path = "（命令式清理）";
-                    item.Exists = remnantBytes > 0;
-                    item.SizeBytes = remnantBytes;
-                    items.Add(item);
-                    continue;
-                }
-
-                // 通用路径解析
-                var resolved = ResolvePath(relativePath, baseFolder, ctx);
-                if (resolved != null)
-                {
-                    item.Path = resolved;
-                    item.Exists = Directory.Exists(resolved);
-                    if (item.Exists)
-                    {
-                        // 缩略图缓存仅计算 thumbcache_*/iconcache_* 文件（避免先全扫再覆盖的双扫问题）
-                        item.SizeBytes = name == "Windows 缩略图缓存"
-                            ? SumFiles(resolved, "thumbcache_*", SearchOption.TopDirectoryOnly)
-                              + SumFiles(resolved, "iconcache_*", SearchOption.TopDirectoryOnly)
-                            : SumFiles(resolved);
-                    }
+                        BaseFolder.Windows => Path.Combine(ctx.WindowsDir, rule.Path),
+                        BaseFolder.LocalAppData => Path.Combine(ctx.LocalAppData, rule.Path),
+                        BaseFolder.AppData => Path.Combine(ctx.AppData, rule.Path),
+                        BaseFolder.UserProfile => Path.Combine(ctx.UserProfile, rule.Path),
+                        BaseFolder.ProgramData => Path.Combine(ctx.ProgramData, rule.Path),
+                        _ => Path.Combine(SysRoot, rule.Path)
+                    };
                 }
                 else
                 {
-                    item.Path = "";
+                    resolved = ResolvePath(rule.Path, rule.Base, ctx);
                 }
 
-                if (name == "Windows 缩略图缓存" && item.Exists && item.SizeBytes == 0)
+                if (resolved != null)
+                {
+                    item.Path = resolved;
+                    item.Exists = rule.Kind == "file" ? File.Exists(resolved) : Directory.Exists(resolved);
+                    if (item.Exists)
+                    {
+                        if (rule.Kind == "file")
+                        {
+                            item.SizeBytes = new FileInfo(resolved).Length;
+                        }
+                        else if (rule.SkipSize)
+                        {
+                            // WinSxS 等位置：硬链接虚高且全量遍历极慢，跳过统计
+                            item.SizeBytes = 0;
+                        }
+                        else if (rule.FilesPatterns is { Count: > 0 })
+                        {
+                            // 指定文件模式的项（缩略图/图标缓存、CBS 日志）：只统计匹配文件
+                            foreach (var pattern in rule.FilesPatterns)
+                                item.SizeBytes += SumFiles(resolved, pattern, SearchOption.TopDirectoryOnly);
+                        }
+                        else
+                        {
+                            item.SizeBytes = SumFiles(resolved);
+                        }
+                    }
+                }
+
+                // 文件/模式匹配项统计为 0 时隐藏，避免列表空行
+                if ((rule.Kind == "file" || rule.FilesPatterns is { Count: > 0 }) && item.Exists && item.SizeBytes == 0)
                     item.Exists = false;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"扫描 {name} 失败: {ex.Message}");
+                Debug.WriteLine($"扫描 {rule.Name} 失败: {ex.Message}");
                 item.Path = "";
             }
 
@@ -635,10 +507,6 @@ public static class CacheScanner
         if (item.Name == "遗留性能追踪会话")
             return CleanLeftoverTraces();
 
-        // 只读报告项：删除 Package Cache 会破坏 Visual Studio 的修复/卸载能力，绝不清理
-        if (item.Name == "VS 安装缓存")
-            return default;
-
         // UWP 缓存族项的 Path 是 Packages 根目录，实际按名称携带的子族逐包清理
         if (item.Name.StartsWith("UWP "))
             return CleanUwpCacheFamily(item, cancellationToken);
@@ -646,6 +514,23 @@ public static class CacheScanner
         // AI CLI 自更新遗留目录（保留最新版本）；GitHub Desktop 旧版本走下方精确匹配
         if (item.Name.StartsWith("Codex") && item.Name.EndsWith(" 旧版本"))
             return CleanKeepNewest(item.Path, cancellationToken);
+
+        // 规则驱动检查：进程守卫（浏览器/微信等运行中其缓存必然被锁，直接跳过并留痕）
+        var rule = CleaningRules.Find(item.Name);
+        if (rule?.GuardProcesses is { Count: > 0 })
+        {
+            var running = rule.GuardProcesses.Where(HasRunningProcess).ToList();
+            if (running.Count > 0)
+            {
+                progress?.Report($"跳过 {item.Name}（{string.Join("、", running)} 正在运行）");
+                CleanLog.NoteFailure($"进程运行中跳过 [{string.Join("、", running)}]: {item.Path}");
+                return default;
+            }
+        }
+
+        // 规则声明只读报告（如 VS 安装缓存）：绝不清理
+        if (rule?.Clean == "reportOnly")
+            return default;
 
         // 存在性门卫：目录或单文件（如 C:\Windows\Memory.dmp）均放行
         if (!item.Exists || string.IsNullOrEmpty(item.Path) ||
@@ -659,18 +544,35 @@ public static class CacheScanner
             return default;
         }
 
+        // 规则声明的文件模式清理（thumbcache_*/iconcache_*、CbsPersist_* 等）
+        if (rule?.FilesPatterns is { Count: > 0 })
+        {
+            CleanResult patternTotal = default;
+            foreach (var pattern in rule.FilesPatterns)
+            {
+                patternTotal += rule.MinAgeDays > 0
+                    ? CleanOldFiles(item.Path, pattern, rule.MinAgeDays)
+                    : CleanFiles(item.Path, pattern);
+            }
+
+            if (patternTotal.FreedBytes > 0)
+            {
+                item.SizeBytes = Math.Max(0, item.SizeBytes - patternTotal.FreedBytes);
+                if (item.SizeBytes == 0) item.Exists = false;
+            }
+            return patternTotal;
+        }
+
         CleanResult result = item.Name switch
         {
             "pip 缓存" => CleanPipCache(item, progress),
             "Windows 临时文件" => CleanTempFiles(item.Path, cancellationToken),
             "系统临时文件" => CleanTempFiles(item.Path, cancellationToken),
-            "Windows 缩略图缓存" => CleanThumbAndIconCache(item.Path),
             "系统内存转储" => CleanSingleFile(item.Path),
             "GitHub Desktop 旧版本" => CleanGithubDesktopOldVersions(item.Path, cancellationToken),
             "回收站" => CleanRecycleBin(cancellationToken),
             "Windows 更新下载缓存" => CleanWindowsUpdateCache(item.Path, cancellationToken),
             "Delivery Optimization 缓存" => CleanDeliveryOptimizationCache(item),
-            "CBS 服务日志" => CleanOldFiles(item.Path, "CbsPersist_*", 30),
             "Windows 组件存储 (WinSxS)" => RunComponentCleanup(item, progress, cancellationToken),
             _ => CleanDirectory(item.Path, cancellationToken),
         };
@@ -1761,16 +1663,6 @@ public static class CacheScanner
             return new CleanResult(0, ok ? 1 : 0, 0, 0, ok ? 0 : 1, 0);
         }
 
-        /// <summary>
-        /// 缩略图 + 图标缓存合并清理（同目录并存，iconcache_* 此前一直漏清）
-        /// </summary>
-        private static CleanResult CleanThumbAndIconCache(string path)
-        {
-            var thumbs = CleanFiles(path, "thumbcache_*");
-            var icons = CleanFiles(path, "iconcache_*");
-            return thumbs + icons;
-        }
-
     /// <summary>
     /// 查询 C 盘卷影副本（系统还原点）实际占用的空间。
     /// 解析 vssadmin 输出中第一处「数值 + 单位」（已用行在保留/上限行之前，标签文本随系统语言变化，数值格式稳定）。
@@ -2292,6 +2184,29 @@ public static class CacheScanner
             Debug.WriteLine($"启动 pip 命令失败: {ex.Message}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// 检查某个进程名是否正在运行（规则 guardProcesses 的检查原语）
+    /// </summary>
+    private static bool HasRunningProcess(string processName)
+    {
+        try
+        {
+            foreach (var p in Process.GetProcesses())
+            {
+                try
+                {
+                    if (p.ProcessName.Equals(processName, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"进程检测失败: {ex.Message}");
+        }
+        return false;
     }
 
     /// <summary>

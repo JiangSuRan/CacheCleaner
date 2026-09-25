@@ -1,0 +1,468 @@
+[
+  {
+    "name": "pip 缓存",
+    "desc": "Python 包管理器缓存，清理后不影响已安装的包",
+    "risk": "safe",
+    "kind": "special"
+  },
+  {
+    "name": "uv 缓存",
+    "base": "localAppData",
+    "path": "uv\\cache",
+    "desc": "Python uv 包管理器缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "npm 缓存",
+    "base": "localAppData",
+    "path": "npm-cache",
+    "desc": "Node.js 包管理器缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "pnpm 缓存",
+    "base": "localAppData",
+    "path": "pnpm-cache",
+    "desc": "pnpm 包管理器缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "pnpm store",
+    "base": "localAppData",
+    "path": "pnpm\\store",
+    "desc": "pnpm 内容寻址包存储，清理后按需重新下载",
+    "risk": "safe"
+  },
+  {
+    "name": "VS Code 日志",
+    "base": "appData",
+    "path": "Code\\logs",
+    "desc": "VS Code 日志文件",
+    "risk": "safe"
+  },
+  {
+    "name": "RStudio 缓存",
+    "base": "localAppData",
+    "path": "RStudio\\cache",
+    "desc": "RStudio 缓存（仅 cache 子目录）",
+    "risk": "safe"
+  },
+  {
+    "name": "RStudio 日志",
+    "base": "localAppData",
+    "path": "RStudio\\log",
+    "desc": "RStudio 日志文件",
+    "risk": "safe"
+  },
+  {
+    "name": "VS Code 工作区状态",
+    "base": "appData",
+    "path": "Code\\User\\workspaceStorage",
+    "desc": "VS Code 工作区界面状态，清理后各工作区状态重置",
+    "risk": "warn"
+  },
+  {
+    "name": "Cursor 工作区状态",
+    "base": "appData",
+    "path": "Cursor\\User\\workspaceStorage",
+    "desc": "Cursor 工作区界面状态，清理后各工作区状态重置",
+    "risk": "warn"
+  },
+  {
+    "name": "Positron 工作区状态",
+    "base": "appData",
+    "path": "Positron\\User\\workspaceStorage",
+    "desc": "Positron 工作区界面状态，清理后各工作区状态重置",
+    "risk": "warn"
+  },
+  {
+    "name": "迅雷缓存",
+    "base": "localAppData",
+    "path": "Thunder Network",
+    "desc": "迅雷下载缓存",
+    "risk": "warn"
+  },
+  {
+    "name": "剪映缓存",
+    "base": "localAppData",
+    "path": "JianyingPro\\User Data\\Cache",
+    "desc": "剪映视频编辑缓存",
+    "risk": "warn"
+  },
+  {
+    "name": "Edge 缓存",
+    "base": "localAppData",
+    "path": "Microsoft\\Edge\\User Data\\Default\\Cache",
+    "desc": "Edge 浏览器缓存（运行中自动跳过）",
+    "risk": "safe",
+    "guardProcesses": ["msedge"]
+  },
+  {
+    "name": "Chrome 缓存",
+    "base": "localAppData",
+    "path": "Google\\Chrome\\User Data\\Default\\Cache",
+    "desc": "Chrome 浏览器缓存（运行中自动跳过）",
+    "risk": "safe",
+    "guardProcesses": ["chrome"]
+  },
+  {
+    "name": "Windows 临时文件",
+    "base": "localAppData",
+    "path": "Temp",
+    "desc": "Windows 临时文件（仅清理超过7天的）",
+    "risk": "warn"
+  },
+  {
+    "name": "Windows 缩略图缓存",
+    "base": "localAppData",
+    "path": "Microsoft\\Windows\\Explorer",
+    "desc": "资源管理器缩略图与图标缓存（thumbcache_*/iconcache_*）",
+    "risk": "safe",
+    "clean": "files",
+    "filesPatterns": ["thumbcache_*", "iconcache_*"]
+  },
+  {
+    "name": "Windows 预读取",
+    "base": "windows",
+    "path": "Prefetch",
+    "desc": "Windows 程序预读取缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "Cursor 日志",
+    "base": "appData",
+    "path": "Cursor\\logs",
+    "desc": "Cursor AI 编辑器日志",
+    "risk": "safe"
+  },
+  {
+    "name": "Trae CN 日志",
+    "base": "appData",
+    "path": "Trae CN\\logs",
+    "desc": "字节跳动 Trae IDE 日志",
+    "risk": "safe"
+  },
+  {
+    "name": "Copilot 缓存",
+    "base": "localAppData",
+    "path": "copilot",
+    "desc": "GitHub Copilot 插件缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "bilibili 缓存",
+    "base": "appData",
+    "path": "bilibili\\Cache",
+    "desc": "哔哩哔哩客户端缓存（运行中自动跳过）",
+    "risk": "safe",
+    "guardProcesses": ["bilibili"]
+  },
+  {
+    "name": "bilibili 日志",
+    "base": "appData",
+    "path": "bilibili\\logs",
+    "desc": "哔哩哔哩客户端日志",
+    "risk": "safe"
+  },
+  {
+    "name": "Obsidian 缓存",
+    "base": "appData",
+    "path": "obsidian\\Cache",
+    "desc": "Obsidian 笔记缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "百度翻译缓存",
+    "base": "appData",
+    "path": "BdTranslateClient\\Cache",
+    "desc": "百度翻译客户端缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "doc2x 缓存",
+    "base": "appData",
+    "path": "doc2x\\Cache",
+    "desc": "doc2x 文档转换缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "NuGet 包缓存",
+    "base": "userProfile",
+    "path": ".nuget\\packages",
+    "desc": ".NET NuGet 包缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "NuGet HTTP 缓存",
+    "base": "localAppData",
+    "path": "NuGet\\v3-cache",
+    "desc": "NuGet HTTP 缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "R 编译缓存",
+    "base": "localAppData",
+    "path": "R\\cache",
+    "desc": "R 包编译缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "node-gyp 缓存",
+    "base": "localAppData",
+    "path": "node-gyp\\Cache",
+    "desc": "Node.js 原生模块编译缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "D3D 着色器缓存",
+    "base": "localAppData",
+    "path": "D3DSCache",
+    "desc": "Direct3D 着色器缓存，清理后自动重建",
+    "risk": "safe"
+  },
+  {
+    "name": "NVIDIA 着色器缓存",
+    "base": "localAppData",
+    "path": "NVIDIA\\DXCache",
+    "desc": "NVIDIA DirectX 着色器缓存，清理后自动重建",
+    "risk": "safe"
+  },
+  {
+    "name": "NVIDIA OpenGL 缓存",
+    "base": "localAppData",
+    "path": "NVIDIA\\GLCache",
+    "desc": "NVIDIA OpenGL 着色器缓存，清理后自动重建",
+    "risk": "safe"
+  },
+  {
+    "name": "AMD 着色器缓存",
+    "base": "localAppData",
+    "path": "AMD\\DxCache",
+    "desc": "AMD DirectX 着色器缓存，清理后自动重建",
+    "risk": "safe"
+  },
+  {
+    "name": "AMD Dxc 着色器缓存",
+    "base": "localAppData",
+    "path": "AMD\\DxcCache",
+    "desc": "AMD DXC 着色器缓存，清理后自动重建",
+    "risk": "safe"
+  },
+  {
+    "name": "Intel 着色器缓存",
+    "base": "localAppData",
+    "path": "Intel\\ShaderCache",
+    "desc": "Intel GPU 着色器缓存，清理后自动重建",
+    "risk": "safe"
+  },
+  {
+    "name": "崩溃转储",
+    "base": "localAppData",
+    "path": "CrashDumps",
+    "desc": "应用程序崩溃转储文件",
+    "risk": "safe"
+  },
+  {
+    "name": "PowerToys 更新缓存",
+    "base": "localAppData",
+    "path": "Microsoft\\PowerToys\\Updates",
+    "desc": "PowerToys 更新包",
+    "risk": "safe"
+  },
+  {
+    "name": "Electron 安装临时文件",
+    "base": "localAppData",
+    "path": "SquirrelTemp",
+    "desc": "Electron 应用安装临时文件",
+    "risk": "safe"
+  },
+  {
+    "name": "腾讯日志",
+    "base": "appData",
+    "path": "Tencent\\Logs",
+    "desc": "腾讯软件日志文件",
+    "risk": "safe"
+  },
+  {
+    "name": "微信小程序运行时",
+    "base": "appData",
+    "path": "Tencent\\WeChat\\XPlugin",
+    "desc": "微信3.x 小程序运行时组件，清理后首次使用小程序需重新下载（微信运行中自动跳过）",
+    "risk": "warn",
+    "guardProcesses": ["WeChat"]
+  },
+  {
+    "name": "微信4.0 日志",
+    "base": "appData",
+    "path": "Tencent\\xwechat\\log",
+    "desc": "微信4.0 运行日志（微信运行中自动跳过）",
+    "risk": "safe",
+    "guardProcesses": ["Weixin"]
+  },
+  {
+    "name": "微信4.0 更新包",
+    "base": "appData",
+    "path": "Tencent\\xwechat\\update",
+    "desc": "微信4.0 已下载的更新安装包（微信运行中自动跳过）",
+    "risk": "safe",
+    "guardProcesses": ["Weixin"]
+  },
+  {
+    "name": "微信4.0 小程序运行时",
+    "base": "appData",
+    "path": "Tencent\\xwechat\\xplugin",
+    "desc": "微信4.0 小程序运行时组件，清理后首次使用小程序需重新下载（微信运行中自动跳过）",
+    "risk": "warn",
+    "guardProcesses": ["Weixin"]
+  },
+  {
+    "name": "微信输入法安装包",
+    "base": "appData",
+    "path": "Tencent\\WeType\\setup",
+    "desc": "微信输入法下载的安装包缓存，更新时重新下载",
+    "risk": "warn"
+  },
+  {
+    "name": "GitHub Desktop 更新包",
+    "base": "localAppData",
+    "path": "GitHubDesktop\\packages",
+    "desc": "GitHub Desktop 更新包缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "Docker 镜像/容器",
+    "base": "localAppData",
+    "path": "Docker",
+    "desc": "Docker Desktop 所有数据（镜像+容器+卷），删除后不可恢复，慎重",
+    "risk": "danger"
+  },
+  {
+    "name": "Windows 更新下载缓存",
+    "base": "windows",
+    "path": "SoftwareDistribution\\Download",
+    "desc": "Windows Update 下载缓存（自动停启 wuauserv/bits）",
+    "risk": "safe"
+  },
+  {
+    "name": "Delivery Optimization 缓存",
+    "base": "windows",
+    "path": "SoftwareDistribution\\DeliveryOptimization",
+    "desc": "Windows 传递优化缓存（官方 cmdlet 清理）",
+    "risk": "safe"
+  },
+  {
+    "name": "系统临时文件",
+    "base": "windows",
+    "path": "Temp",
+    "desc": "系统临时文件（仅清理超过 7 天的）",
+    "risk": "warn"
+  },
+  {
+    "name": "Windows 错误报告归档",
+    "base": "programData",
+    "path": "Microsoft\\Windows\\WER\\ReportArchive",
+    "desc": "Windows 错误报告归档",
+    "risk": "safe"
+  },
+  {
+    "name": "Windows 错误报告队列",
+    "base": "programData",
+    "path": "Microsoft\\Windows\\WER\\ReportQueue",
+    "desc": "Windows 错误报告队列",
+    "risk": "safe"
+  },
+  {
+    "name": "VS 安装缓存",
+    "base": "programData",
+    "path": "Package Cache",
+    "desc": "Visual Studio 安装包缓存（只读报告：删除会破坏修复/卸载）",
+    "risk": "warn",
+    "clean": "reportOnly"
+  },
+  {
+    "name": "CBS 服务日志",
+    "base": "windows",
+    "path": "Logs\\CBS",
+    "desc": "Windows 组件服务日志（CbsPersist_*），仅清理 30 天前的",
+    "risk": "warn",
+    "clean": "files",
+    "filesPatterns": ["CbsPersist_*"],
+    "minAgeDays": 30
+  },
+  {
+    "name": "系统崩溃转储",
+    "base": "windows",
+    "path": "Minidump",
+    "desc": "系统蓝屏/崩溃 minidump 文件",
+    "risk": "warn"
+  },
+  {
+    "name": "内核崩溃报告",
+    "base": "windows",
+    "path": "LiveKernelReports",
+    "desc": "Windows 实时内核崩溃报告",
+    "risk": "warn"
+  },
+  {
+    "name": "系统内存转储",
+    "base": "windows",
+    "path": "Memory.dmp",
+    "desc": "系统内存转储文件（蓝屏后可能数 GB）",
+    "risk": "warn",
+    "kind": "file"
+  },
+  {
+    "name": "汽水音乐缓存",
+    "base": "appData",
+    "path": "SodaMusic\\LunaCacheV2",
+    "desc": "汽水音乐播放缓存，清理后自动重建",
+    "risk": "safe"
+  },
+  {
+    "name": "CLI 工具缓存根",
+    "base": "userProfile",
+    "path": ".cache",
+    "desc": "通用 CLI 工具缓存（codex-runtimes/babeldoc/chroma 等）",
+    "risk": "safe"
+  },
+  {
+    "name": "Codex 临时文件",
+    "base": "userProfile",
+    "path": ".codex\\.tmp",
+    "desc": "OpenAI Codex CLI 临时文件",
+    "risk": "safe"
+  },
+  {
+    "name": "DNS 解析缓存",
+    "desc": "DNS 解析缓存，执行 ipconfig /flushdns",
+    "risk": "safe",
+    "kind": "special"
+  },
+  {
+    "name": "回收站",
+    "base": "driveRoot",
+    "path": "$Recycle.Bin",
+    "desc": "回收站中已删除的文件，清空后不可恢复",
+    "risk": "safe"
+  },
+  {
+    "name": "Windows 升级残留",
+    "desc": "Windows.old/$GetCurrent/ESD 升级残留，走 cleanmgr /autoclean，执行后无法回滚旧版本",
+    "risk": "warn",
+    "kind": "special"
+  },
+  {
+    "name": "系统还原点（卷影副本）",
+    "desc": "卷影副本占用，清理 = 缩减上限到 3GB（保留最新还原点）",
+    "risk": "warn",
+    "kind": "special"
+  },
+  {
+    "name": "Windows 组件存储 (WinSxS)",
+    "base": "windows",
+    "path": "WinSxS",
+    "desc": "组件存储，DISM 清理被取代的旧组件（15-30 分钟）",
+    "risk": "warn",
+    "skipSize": true
+  }
+]

@@ -34,6 +34,7 @@
 - **通用性**
   - 系统盘符运行时推导（Windows 不在 C 盘同样可用）；命令解析兼容中英文系统输出
   - 全部条目按目录是否存在自动显隐，不同机器只列出实际存在的项目；Conda 安装位置动态发现
+  - 清理规则外置 JSON：默认规则内嵌于程序；放一份 `rules.user.json`（exe 同目录或 `%LOCALAPPDATA%\CacheCleaner\`）即可增改规则，无需重新编译；规则可声明 `guardProcesses`（进程守卫）、`filesPatterns`、`minAgeDays` 等字段
   - 自包含单文件（x64），无需安装 .NET 运行时；需 Windows 10/11 与管理员权限
 
 ## 下载安装
