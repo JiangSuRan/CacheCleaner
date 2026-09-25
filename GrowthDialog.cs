@@ -16,8 +16,26 @@ public class GrowthDialog : Form
     private ComboBox cboDays = null!;
     private Button btnStart = null!;
     private Label lblStatus = null!;
+    private Label lblAdvice = null!;
     private ListView lvFiles = null!;
     private CancellationTokenSource? _cts;
+
+    // 迁盘顾问：结果中命中即给出官方迁盘命令（只提示不执行）——对小系统盘，官方迁盘比反复清理更根本
+    private static readonly (string Marker, string Hint)[] RelocationHints =
+    [
+        ("\\npm-cache", "npm：npm config set cache D:\\dev-cache\\npm --global"),
+        ("\\pnpm", "pnpm：pnpm config set store-dir D:\\dev-cache\\pnpm-store"),
+        ("\\uv\\cache", "uv：setx UV_CACHE_DIR D:\\dev-cache\\uv"),
+        ("\\pip\\cache", "pip：setx PIP_CACHE_DIR D:\\dev-cache\\pip"),
+        ("\\go-build", "Go 构建缓存：setx GOCACHE D:\\dev-cache\\go-build"),
+        ("\\go\\pkg\\mod", "Go 模块：setx GOPATH D:\\dev-cache\\go"),
+        ("\\.cargo\\registry", "Rust：setx CARGO_HOME D:\\dev-cache\\cargo"),
+        ("\\.gradle\\caches", "Gradle：setx GRADLE_USER_HOME D:\\dev-cache\\gradle"),
+        ("\\.ollama", "Ollama 模型：setx OLLAMA_MODELS D:\\dev-models\\ollama"),
+        ("\\.cache\\huggingface", "HuggingFace 缓存：setx HF_HOME D:\\dev-models\\huggingface"),
+        ("\\Docker\\wsl", "Docker Desktop：设置 → Resources → 磁盘镜像位置移到其他盘"),
+        ("\\ms-playwright", "Playwright 浏览器：setx PLAYWRIGHT_BROWSERS_PATH D:\\dev-cache\\playwright")
+    ];
 
     // 系统相关扫描根在运行时按实际 Windows/ProgramData 位置构建（通用性：不假设系统在 C 盘）
     private static string[] BuildScanRoots()
@@ -134,6 +152,17 @@ public class GrowthDialog : Form
         lvFiles.Columns.Add("大小", 110);
         lvFiles.Columns.Add("最后写入", 140);
         lvFiles.Columns.Add("文件路径", 640);
+        lblAdvice = new Label
+        {
+            Dock = DockStyle.Bottom,
+            Height = 60,
+            Font = FontSmall,
+            ForeColor = Color.FromArgb(0, 90, 160),
+            BackColor = Color.FromArgb(222, 239, 250),
+            Visible = false,
+            Padding = new Padding(12, 6, 12, 4)
+        };
+        Controls.Add(lblAdvice);
         Controls.Add(lvFiles);
         Controls.SetChildIndex(lvFiles, 0);
 
@@ -167,6 +196,20 @@ public class GrowthDialog : Form
             lblStatus.Text = results.Count == 0
                 ? $"最近 {days} 天没有 >50 MB 的新写入文件"
                 : $"共 {results.Count} 个大文件，合计 {CacheScanner.FormatSize(totalBytes)}";
+
+            // 迁盘顾问：命中已知可迁盘的大缓存时，给出官方迁盘命令
+            var hints = RelocationHints
+                .Where(h => results.Any(r => r.FilePath.Contains(h.Marker, StringComparison.OrdinalIgnoreCase)))
+                .Select(h => "• " + h.Hint)
+                .Distinct()
+                .Take(3)
+                .ToList();
+            lblAdvice.Visible = hints.Count > 0;
+            if (hints.Count > 0)
+            {
+                lblAdvice.Text = "💡 迁盘顾问（对小系统盘，官方迁盘比反复清理更根本）：\n" + string.Join("\n", hints);
+                lblAdvice.Height = 34 + hints.Count * 18;
+            }
         }
         catch (OperationCanceledException)
         {

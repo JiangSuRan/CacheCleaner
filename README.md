@@ -31,6 +31,7 @@
 | 🧩 **JSON 规则引擎** | 64 条规则外置于 `rules.default.json`，放一份 `rules.user.json` 即可增改规则，**无需重新编译**（对标 Winapp2.ini 的规则库思路） |
 | 🖥️ **系统级瘦身** | 回收站、系统还原点（缩减上限保留最新）、WinSxS 组件存储（DISM）、Windows 升级残留（cleanmgr /autoclean）、Windows 更新缓存（自动停启服务） |
 | 🐳 **Docker/WSL 再生性清理** | `docker system prune` 按 df 差值计释放；vhdx 虚拟磁盘 `diskpart compact` 离线压缩——只回收空白，不碰数据 |
+| 🤖 **Agent 规则包** | Claude/通义灵码/MarsCode 的会话转录超龄清理（配置与凭证绝不碰）；`pnpm store prune`、`go clean -modcache` 官方命令集成；Ollama/HuggingFace 模型库只读报告；增长分析内置迁盘顾问 |
 | 🌍 **通用性** | 系统盘符运行时推导（Windows 不在 C 盘同样可用）；中英文系统输出与小数逗号 locale 兼容；Conda 安装位置动态发现 |
 
 ## 🚀 快速开始
@@ -96,6 +97,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 | v3.7 | 通用性 | 系统盘符运行时推导、Conda 动态发现、多语言/locale 兼容 |
 | v3.8 | 架构 | JSON 规则引擎 + 逐规则进程守卫 |
 | v3.9 | 体验 | 预览模式、设置持久化、Docker/WSL 再生性清理 |
+| v4.0 | Agent 时代 | Agent dot-home 规则包、官方 prune 命令集成、模型仓库报告、迁盘顾问 |
 
 ## 🛠️ 技术栈与构建
 

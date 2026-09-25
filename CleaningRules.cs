@@ -105,8 +105,17 @@ internal sealed class CleaningRule
     /// <summary>files 模式下仅清理早于该天数的文件（如 CBS 日志 30 天）</summary>
     public int MinAgeDays { get; set; }
 
+    /// <summary>files 模式递归子目录（默认仅顶层）</summary>
+    public bool Recursive { get; set; }
+
     /// <summary>true 时跳过体积统计（WinSxS：硬链接虚高且全量遍历极慢）</summary>
     public bool SkipSize { get; set; }
+
+    /// <summary>clean=command 时执行的官方清理命令（如 pnpm store prune / go clean -modcache），经 cmd /c 解析 .cmd 垫片</summary>
+    public string? Command { get; set; }
+
+    /// <summary>命令式清理的超时（毫秒），默认 10 分钟</summary>
+    public int CommandTimeoutMs { get; set; } = 600_000;
 
     /// <summary>清理前检查的进程名，任一运行中即跳过该项（如浏览器运行时其缓存必然被锁）</summary>
     public List<string>? GuardProcesses { get; set; }

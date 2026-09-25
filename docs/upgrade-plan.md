@@ -102,3 +102,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 ```
 
 首次运行建立基线；管理员终端运行可完整读取 `C:\Windows\...` 位置。
+
+## 7. v4.0「Agent 规则包」（源自 docs/research-agent-storage.md 调研结论）
+
+> ✅ 状态：全部实施（2026-09-26，随 v4.0 发布）。
+> ① 规则引擎新增 `clean: "command"`（`command`/`commandTimeoutMs` 字段，经 cmd /c 解析 .cmd 垫片，释放量按目标目录前后差值计）与 `recursive` 字段；
+> ② Agent dot-home 规则 10 条：Claude 会话转录（30 天超龄递归清理，配置/记忆/凭证绝不碰）、Claude shell 快照与缓存、灵码缓存/日志/索引、MarsCode 索引/日志——`.trae-cn`（全是扩展）、`.codegeex`（内嵌 mamba 运行时）、`.pi`（agent 数据语义未核验）经实测后未纳入；
+> ③ 模型仓库 reportOnly：Ollama / HuggingFace（提示 `ollama rm` / `huggingface-cli delete-cache`，不代删）；
+> ④ 迁盘顾问：增长分析命中 12 类可迁盘缓存（npm/pnpm/uv/pip/Go/Rust/Gradle/Ollama/HF/Docker/Playwright）时给出官方迁盘命令；
+> ⑤ `pnpm store` 由裸删改官方 `pnpm store prune`，新增 `go clean -modcache`；
+> ⑥ `~/.cache` 兜底规则改 Warn（防误删其中的模型缓存）。
+> 竞品参照：zclean/Jharu/claude-code-cleaner 等 2026 年同类项目均 ≤100 星，CacheCleaner 的安全语义（三级风险+守卫+预览+审计）构成差异化。

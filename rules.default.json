@@ -30,8 +30,21 @@
     "name": "pnpm store",
     "base": "localAppData",
     "path": "pnpm\\store",
-    "desc": "pnpm 内容寻址包存储，清理后按需重新下载",
-    "risk": "safe"
+    "desc": "pnpm 内容寻址存储，官方 prune 只删无引用包（活跃项目安全）",
+    "risk": "safe",
+    "clean": "command",
+    "command": "pnpm store prune",
+    "commandTimeoutMs": 600000
+  },
+  {
+    "name": "Go 模块缓存",
+    "base": "userProfile",
+    "path": "go\\pkg\\mod",
+    "desc": "Go 模块下载缓存，官方 go clean -modcache 清空后按需自动重新下载",
+    "risk": "safe",
+    "clean": "command",
+    "command": "go clean -modcache",
+    "commandTimeoutMs": 600000
   },
   {
     "name": "VS Code 日志",
@@ -415,8 +428,8 @@
     "name": "CLI 工具缓存根",
     "base": "userProfile",
     "path": ".cache",
-    "desc": "通用 CLI 工具缓存（codex-runtimes/babeldoc/chroma 等）",
-    "risk": "safe"
+    "desc": "通用 CLI 工具缓存（babeldoc/chroma 等）。注意：若含 HuggingFace/torch 模型缓存，清理后需重新下载大文件",
+    "risk": "warn"
   },
   {
     "name": "Codex 临时文件",
@@ -424,6 +437,82 @@
     "path": ".codex\\.tmp",
     "desc": "OpenAI Codex CLI 临时文件",
     "risk": "safe"
+  },
+  {
+    "name": "Claude 会话转录",
+    "base": "userProfile",
+    "path": ".claude\\projects",
+    "desc": "Claude Code 会话转录（对话记录），仅清理 30 天前的旧会话；配置/记忆/凭证绝不触碰",
+    "risk": "warn",
+    "clean": "files",
+    "filesPatterns": ["*.jsonl"],
+    "minAgeDays": 30,
+    "recursive": true
+  },
+  {
+    "name": "Claude Shell 快照",
+    "base": "userProfile",
+    "path": ".claude\\shell-snapshots",
+    "desc": "Claude Code 的 shell 环境快照，可再生成",
+    "risk": "safe"
+  },
+  {
+    "name": "Claude 缓存",
+    "base": "userProfile",
+    "path": ".claude\\cache",
+    "desc": "Claude Code 本地缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "通义灵码 缓存",
+    "base": "userProfile",
+    "path": ".lingma\\cache",
+    "desc": "通义灵码本地缓存",
+    "risk": "safe"
+  },
+  {
+    "name": "通义灵码 日志",
+    "base": "userProfile",
+    "path": ".lingma\\logs",
+    "desc": "通义灵码运行日志",
+    "risk": "safe"
+  },
+  {
+    "name": "通义灵码 代码索引",
+    "base": "userProfile",
+    "path": ".lingma\\index",
+    "desc": "通义灵码代码索引，清理后首次使用需重建索引",
+    "risk": "safe"
+  },
+  {
+    "name": "MarsCode 代码索引",
+    "base": "userProfile",
+    "path": ".marscode\\.ckg",
+    "desc": "MarsCode 代码知识图谱索引，清理后重建",
+    "risk": "safe"
+  },
+  {
+    "name": "MarsCode 日志",
+    "base": "userProfile",
+    "path": ".marscode\\logs",
+    "desc": "MarsCode 运行日志",
+    "risk": "safe"
+  },
+  {
+    "name": "Ollama 模型库",
+    "base": "userProfile",
+    "path": ".ollama",
+    "desc": "本地模型权重库（只读报告）：用 ollama list / ollama rm <模型> 管理，本工具不代删",
+    "risk": "warn",
+    "clean": "reportOnly"
+  },
+  {
+    "name": "HuggingFace 模型缓存",
+    "base": "userProfile",
+    "path": ".cache\\huggingface",
+    "desc": "HF 模型/数据集缓存（只读报告）：用 huggingface-cli delete-cache 选择性清理，本工具不代删",
+    "risk": "warn",
+    "clean": "reportOnly"
   },
   {
     "name": "DNS 解析缓存",

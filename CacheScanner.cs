@@ -566,8 +566,8 @@ public static class CacheScanner
             foreach (var pattern in rule.FilesPatterns)
             {
                 patternTotal += rule.MinAgeDays > 0
-                    ? CleanOldFiles(item.Path, pattern, rule.MinAgeDays)
-                    : CleanFiles(item.Path, pattern);
+                    ? CleanOldFiles(item.Path, pattern, rule.MinAgeDays, rule.Recursive)
+                    : CleanFiles(item.Path, pattern, rule.Recursive);
             }
 
             if (patternTotal.FreedBytes > 0 && !DryRun)
@@ -576,6 +576,36 @@ public static class CacheScanner
                 if (item.SizeBytes == 0) item.Exists = false;
             }
             return patternTotal;
+        }
+
+        // 规则声明的命令式清理（官方 prune：pnpm store prune / go clean -modcache 等）——
+        // 优先走官方命令而非裸删，保证内容寻址存储的引用安全；释放量按目标目录前后差值计
+        if (rule?.Clean == "command" && !string.IsNullOrWhiteSpace(rule.Command))
+        {
+            if (DryRun)
+            {
+                progress?.Report($"预览模式：跳过执行 {rule.Command}");
+                return new CleanResult(0, 1, 0, 0, 0, 0);
+            }
+
+            long before = Directory.Exists(item.Path) ? SumFiles(item.Path) : 0;
+            progress?.Report($"正在执行 {rule.Command} ...");
+            // 经 cmd /c 解析：pnpm/conda 等在 Windows 上是 .cmd 垫片而非 exe
+            var (ok, output) = RunCommandOutput("cmd", $"/d /s /c \"{rule.Command}\"", rule.CommandTimeoutMs);
+            if (!ok)
+            {
+                CleanLog.NoteFailure($"命令清理失败 [{rule.Command}]: {output.Trim()}");
+                return new CleanResult(0, 0, 0, 0, 1, 0);
+            }
+
+            long freed = 0;
+            if (Directory.Exists(item.Path))
+            {
+                long after = SumFiles(item.Path);
+                freed = Math.Max(0, before - after);
+                item.SizeBytes = after;
+            }
+            return new CleanResult(freed, 1, 0, 0, 0, 0);
         }
 
         CleanResult result = item.Name switch
@@ -758,7 +788,7 @@ public static class CacheScanner
     /// <summary>
     /// 删除匹配的文件并累计释放字节数（统一替代重复的删除循环）
     /// </summary>
-    private static CleanResult CleanFiles(string path, string pattern)
+    private static CleanResult CleanFiles(string path, string pattern, bool recursive = false)
     {
         if (!Directory.Exists(path)) return default;
         long freed = 0;
@@ -767,7 +797,8 @@ public static class CacheScanner
         try
         {
             var dir = new DirectoryInfo(path);
-            foreach (var file in dir.EnumerateFiles(pattern))
+            foreach (var file in dir.EnumerateFiles(pattern,
+                recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))
             {
                 try
                 {
@@ -1628,7 +1659,7 @@ public static class CacheScanner
         /// <summary>
         /// 删除匹配且超过 ageDays 天的文件（如 CBS 的 CbsPersist_*，绝不能碰正在写入的 CBS.log）
         /// </summary>
-        private static CleanResult CleanOldFiles(string path, string pattern, int ageDays)
+        private static CleanResult CleanOldFiles(string path, string pattern, int ageDays, bool recursive = false)
         {
             if (!Directory.Exists(path)) return default;
 
@@ -1638,7 +1669,8 @@ public static class CacheScanner
 
             try
             {
-                foreach (var file in new DirectoryInfo(path).EnumerateFiles(pattern, SearchOption.TopDirectoryOnly))
+                foreach (var file in new DirectoryInfo(path).EnumerateFiles(pattern,
+                    recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))
                 {
                     if (file.LastWriteTime >= cutoff) continue;
                     try
