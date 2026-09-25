@@ -54,6 +54,8 @@ Remove-Item "C:\Windows\System32\LogFiles\WMI\NetCore.etl" -Force
 
 ## 4. 阶段 1 —— 覆盖面扩展（1-2 天，按本机收益排序）
 
+> ✅ 状态：已实施（2026-09-26，随 v3.5 发布）。16 条规则中 14 条落地；飞书仅接入根级散装缓存（`aha` 1.1GB 含用户数据待后续核验）；OpenCodex 无版本哈希结构，暂未接入；WeGame 与 Tencent\radium 为程序组件，评估后不纳入。
+
 | 新增规则 | 路径 / 方式 | 风险 | 本机预期 | 备注 |
 |---|---|---|---|---|
 | VS Code/Cursor VSIX 缓存 | `%APPDATA%\{Code,Cursor}\CachedExtensionVSIXs`，整目录清空 | Safe | **2.2 GB** | 需要时自动重下 |

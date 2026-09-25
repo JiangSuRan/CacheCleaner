@@ -16,3 +16,6 @@ installer/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+## 会话临时目录（中间文件，不入库）
+_tmp/
