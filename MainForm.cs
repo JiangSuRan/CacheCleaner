@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.Reflection;
@@ -74,7 +75,7 @@ public class MainForm : Form
 
     private void SetupForm()
     {
-        Text = "C盘缓存清理工具 v3.3";
+        Text = "C盘缓存清理工具 v3.4";
         Size = new Size(820, 600);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -414,6 +415,10 @@ public class MainForm : Form
                 autoCount++;
             }
 
+            // 按大小降序排列：清理收益一目了然；无路径的命令式项（0 B）自然沉底
+            // Size 列在 SetupControls 中创建，此处用 null 容忍运算符声明不变量
+            dgv.Sort(dgv.Columns["Size"]!, ListSortDirection.Descending);
+
             lblStatus.Text = $"  扫描完成: {dgv.Rows.Count} 个缓存项目 (其中 {autoCount} 个自动发现)。";
             UpdateTotalSize();
         }
@@ -455,7 +460,8 @@ public class MainForm : Form
         if (!isKnown)
             dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(225, 235, 255);
 
-        if (item.Risk == RiskLevel.Safe)
+        // 仅已知规则的安全项默认勾选；自动发现按目录名匹配（≠纯缓存），一律交由用户逐项确认
+        if (isKnown && item.Risk == RiskLevel.Safe)
             dgv.Rows[rowIdx].Cells["Checked"].Value = true;
     }
 

@@ -86,12 +86,14 @@ public static class CacheScanner
     // 匹配缓存目录的名称（不区分大小写）
     private static readonly HashSet<string> CacheDirNames = new(StringComparer.OrdinalIgnoreCase)
     {
+        // 绝不加入 Chromium 的 "Session Storage"（存站点会话/登录态）和 "blob_storage"
+        // （未提交的 Blob 数据）：名字像缓存但属于用户数据，自动发现按目录名匹配，
+        // 一旦命中并清理会直接丢登录态
         "cache", "caches", "cached", "cache2",
         "temp", "tmp",
         "log", "logs",
         "gpucache", "code cache",
-        "crashdumps", "minidump",
-        "blob_storage", "session storage"
+        "crashdumps", "minidump"
     };
 
     // 跳过的根目录（不扫描系统目录）
@@ -518,11 +520,17 @@ public static class CacheScanner
     /// </summary>
     public static CleanResult CleanItem(CacheItem item, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
     {
-        // 命令式清理项（如 DNS 缓存刷新）没有目录路径，单独处理
+        // 命令式清理项没有可校验的真实路径（Path 为「（命令式清理）」占位符），必须在
+        // 存在性门卫之前分发，否则 File/Directory 检查永远失败，清理函数沦为死代码
         if (item.Name == "DNS 解析缓存")
             return FlushDnsCache();
 
-        if (!item.Exists || string.IsNullOrEmpty(item.Path) || !Directory.Exists(item.Path))
+        if (item.Name == "系统还原点（卷影副本）")
+            return ShrinkShadowStorage(item, progress);
+
+        // 存在性门卫：目录或单文件（如 C:\Windows\Memory.dmp）均放行
+        if (!item.Exists || string.IsNullOrEmpty(item.Path) ||
+            (!Directory.Exists(item.Path) && !File.Exists(item.Path)))
             return default;
 
         // 路径安全校验
@@ -541,7 +549,6 @@ public static class CacheScanner
             "系统内存转储" => CleanSingleFile(item.Path),
             "GitHub Desktop 旧版本" => CleanGithubDesktopOldVersions(item.Path, cancellationToken),
             "回收站" => CleanRecycleBin(cancellationToken),
-            "系统还原点（卷影副本）" => ShrinkShadowStorage(item, progress),
             "Windows 组件存储 (WinSxS)" => RunComponentCleanup(item, progress, cancellationToken),
             _ => CleanDirectory(item.Path, cancellationToken),
         };
@@ -651,8 +658,10 @@ public static class CacheScanner
                 if (file.LastWriteTime >= cutoff) continue;
                 try
                 {
-                    freed += file.Length;
+                    long len = file.Length;
                     file.Delete();
+                    // 删除成功才计入释放量：登记重启删除的文件尚未真正释放，不能虚报
+                    freed += len;
                     deleted++;
                 }
                 catch (IOException)
@@ -705,8 +714,10 @@ public static class CacheScanner
             {
                 try
                 {
-                    freed += file.Length;
+                    long len = file.Length;
                     file.Delete();
+                    // 删除成功才计入释放量：登记重启删除的文件尚未真正释放，不能虚报
+                    freed += len;
                     deleted++;
                 }
                 catch (IOException)
@@ -769,8 +780,10 @@ public static class CacheScanner
                 cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
-                    freed += file.Length;
+                    long len = file.Length;
                     file.Delete();
+                    // 删除成功才计入释放量：登记重启删除的文件尚未真正释放，不能虚报
+                    freed += len;
                     deleted++;
                 }
                 catch (IOException)
@@ -913,8 +926,8 @@ public static class CacheScanner
             for (int i = 1; i < versions.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                freed += SumFiles(versions[i]);
-                try { Directory.Delete(versions[i], true); deleted++; }
+                long size = SumFiles(versions[i]);
+                try { Directory.Delete(versions[i], true); freed += size; deleted++; }
                 catch (Exception ex) { other++; Debug.WriteLine($"删除旧版本失败 {versions[i]}: {ex.Message}"); }
             }
             return new CleanResult(freed, deleted, 0, 0, other, 0);
@@ -1308,7 +1321,8 @@ public static class CacheScanner
     {
         progress?.Report("正在执行 DISM 组件清理（15-30 分钟，请耐心等待）...");
         cancellationToken.ThrowIfCancellationRequested();
-        bool ok = RunCommand("Dism.exe", "/Online /Cleanup-Image /StartComponentCleanup", 1_800_000);
+        // 超时上限 2 小时：老机器首次组件清理可能远超 30 分钟，被超时误判为失败会误导用户
+        bool ok = RunCommand("Dism.exe", "/Online /Cleanup-Image /StartComponentCleanup", 7_200_000);
         if (ok) item.SizeBytes = 0;
         return new CleanResult(0, ok ? 1 : 0, 0, 0, ok ? 0 : 1, 0);
     }
@@ -1542,6 +1556,9 @@ public static class CacheScanner
             return RiskLevel.Danger;
         if (dirName is "temp" or "tmp")
             return RiskLevel.Warn;
+        // 项目日志可能是审计记录而非可丢弃缓存，标 Warn 交由用户判断，且不默认勾选
+        if (dirName is "log" or "logs")
+            return RiskLevel.Warn;
         return RiskLevel.Safe;
     }
 
@@ -1563,7 +1580,15 @@ public static class CacheScanner
             };
             using var proc = Process.Start(psi);
             if (proc == null) return false;
-            proc.WaitForExit(timeoutMs);
+
+            // WaitForExit(timeout) 返回 false = 超时未退出，此时读 ExitCode 会抛
+            // InvalidOperationException；进程仍在后台运行，如实报失败，绝不能误杀
+            // 长任务（DISM 组件清理是小时级操作，中途终止会损坏组件存储）
+            if (!proc.WaitForExit(timeoutMs))
+            {
+                Debug.WriteLine($"命令超时未退出（仍在后台运行）: {fileName} {arguments}");
+                return false;
+            }
             return proc.ExitCode == 0;
         }
         catch (Exception ex)
