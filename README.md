@@ -1,85 +1,136 @@
-# C盘缓存清理工具
+<div align="center">
 
-一个轻量的 Windows 缓存清理工具，自动扫描 C 盘缓存文件，一键释放磁盘空间。
+# 🧹 CacheCleaner
 
-## 功能特点
+**为 Windows 而生的轻量级磁盘瘦身工具 —— 扫描 · 清理 · 诊断 · 规则引擎，一站式**
 
-- **两阶段智能扫描**
-  - 第一阶段：快速扫描 40+ 个已知缓存位置（1-2 秒出结果）
-  - 第二阶段：自动遍历 C 盘用户目录，发现未知应用的缓存
-- **安全防护**
-  - 三级风险标识：安全（绿色）、注意（黄色）、危险（红色）
-  - 以管理员权限运行（启动时弹 UAC），可清理系统目录；自动遍历仍限于用户目录
-  - 路径安全校验 + 系统级精确白名单，防止误删
-  - 清理失败明细可见：被占用 / 权限不足的文件单独计数，不再静默跳过；被占用文件可登记为重启删除
-- **覆盖范围广**
-  - 开发工具：pip、npm、pnpm（含 store）、uv、NuGet、node-gyp、R 编译缓存、CLI 工具缓存根（`~/.cache`）、Codex 临时文件与自更新旧版本（保留最新）
-  - IDE / 编辑器：VS Code、Cursor、Trae CN、Positron、Qoder、RStudio、Claude Desktop、Copilot、CherryStudio——统一扫描 Cache/CachedData/Code Cache/GPUCache/扩展包缓存（VSIX）等子目录；工作区状态单独列为「注意」项
-  - 浏览器：Edge、Chrome、Firefox、Brave、Vivaldi
-  - 音乐/视频客户端：汽水音乐（LunaCacheV2）
-  - 聊天软件：微信4.0 缓存（仅 `cache` 子目录，绝不触碰 `msg` 聊天记录）、微信3.x/4.0 小程序运行时（清理后首次使用需重新下载）、微信4.0 日志与更新包、微信输入法安装包
-  - 系统缓存：Windows 更新下载缓存（自动停启 wuauserv/bits）、Delivery Optimization（官方 cmdlet）、系统临时文件、错误报告（WER）、缩略图与图标缓存、预读取、D3D/NVIDIA/AMD/Intel 着色器缓存、UWP 应用缓存族（AC\INetCache/TempState）、CBS 服务日志（仅 30 天前）、崩溃/内存转储、DNS 缓存
-  - 系统级空间大头：回收站、系统还原点（缩减卷影上限到 3GB，保留最新还原点）、Windows 组件存储（DISM 清理）、Windows 升级残留（cleanmgr /autoclean，清理后无法回滚旧版本）
-  - Adobe 自动恢复快照：扫描 `Adobe * Settings\*\DataRecovery` 会话镜像（AI 重度使用可达数 GB，清理前会提醒关闭对应程序）
-  - 浏览器多 Profile：Edge/Chrome/Brave/Vivaldi 除 Default 外的 Profile 1/2/3... 缓存（只清纯缓存子目录，不动登录态）
-  - 豆包缓存改为白名单子目录清理（不再整目录删除，保留 IndexedDB 登录态和沙箱环境），含热更新资源 hot_fix
-  - 其他：Conda、Docker、迅雷、剪映、豆包、bilibili、Obsidian、飞书（根级缓存）等
-  - 只读报告：VS 安装缓存（Package Cache，删除会破坏修复/卸载，仅提示大小）
-  - 自动发现支持点目录（`.cache` / `.tmp` / `.logs`），可发现未知 CLI 工具的缓存
-- **可观测性**
-  - 清理审计日志落盘（`%LOCALAPPDATA%\CacheCleaner\logs`），逐项释放量与失败明细可复盘
-  - 清理汇总以 C 盘可用空间差为准，文件长度累计仅作明细
-  - 「📈 增长分析」：按最后写入时间找出最近新增的大文件排行，直接定位「谁在吃 C 盘」
-  - 检测并一键停止遗留性能追踪会话（WPR 未停止的录制、手动内核追踪）
-- **预览与持久化**
-  - 「预览模式（不删除）」：只统计将释放的量，不删除任何文件、不执行任何命令、不改动服务状态
-  - 设置持久化：记住预览开关与上次清理的勾选（`%LOCALAPPDATA%\CacheCleaner\settings.json`）
-  - Docker/WSL：改为官方再生性操作——prune 未使用数据（按 df 差值计释放）+ vhdx 虚拟磁盘离线压缩（diskpart compact），取代旧的「整删 Docker 数据」危险项
-- **通用性**
-  - 系统盘符运行时推导（Windows 不在 C 盘同样可用）；命令解析兼容中英文系统输出
-  - 全部条目按目录是否存在自动显隐，不同机器只列出实际存在的项目；Conda 安装位置动态发现
-  - 清理规则外置 JSON：默认规则内嵌于程序；放一份 `rules.user.json`（exe 同目录或 `%LOCALAPPDATA%\CacheCleaner\`）即可增改规则，无需重新编译；规则可声明 `guardProcesses`（进程守卫）、`filesPatterns`、`minAgeDays` 等字段
-  - 自包含单文件（x64），无需安装 .NET 运行时；需 Windows 10/11 与管理员权限
+[![Release](https://img.shields.io/github/v/release/JiangSuRan/CacheCleaner?color=blue&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/JiangSuRan/CacheCleaner/releases)
+[![.NET](https://img.shields.io/badge/.NET-10.0-blueviolet)](https://dotnet.microsoft.com/)
+[![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](https://github.com/JiangSuRan/CacheCleaner/releases)
+[![License](https://img.shields.io/badge/License-MIT-green)](#-许可证)
 
-## 下载安装
+*自包含单文件 · 免安装 · 零依赖 · 数据安全优先*
 
-1. 前往 [Releases 页面](https://github.com/JiangSuRan/CacheCleaner/releases) 下载最新版 `CacheCleaner.exe`（自包含单文件，免安装）
-2. 双击运行安装程序
-3. 安装完成后从桌面快捷方式启动
+</div>
 
-## 使用方法
+---
 
-1. 点击 **「扫描缓存」** — 先快速扫描已知缓存，然后自动发现更多缓存目录
-2. 勾选要清理的项目（已知规则的安全项默认已勾选；`[自动发现]` 项需逐项确认后再勾选）
-3. 点击 **「清理选中」** — 确认后逐项清理
+## ✨ 一句话介绍
 
-扫描过程中可随时点击 **「取消扫描」** 中断。
+双击即用的系统缓存清理器：**两阶段扫描**找到缓存，**三级风险标注**守住安全线，**预览模式**先看后删，**审计日志**让每一 MB 有据可查，**JSON 规则引擎**让覆盖面可以无限扩展——所有这些都装在一个 118 MB 的自包含 exe 里。
 
-自动发现的缓存项会以 `[自动发现]` 前缀和蓝色背景显示，与已知项区分。
+## 🎯 核心能力
 
-## 截图
+| 能力 | 说明 |
+|---|---|
+| 🔍 **两阶段智能扫描** | 秒级扫描 60+ 内置规则位置，随后自动遍历用户目录发现未知应用的缓存（支持 `.cache` / `.tmp` / `.logs` 点目录），并按「目录是否存在」自动显隐——不同机器只列出真实存在的项目 |
+| 🛡️ **三级安全防护** | 安全 / 注意 / 危险三级风险标注；路径安全校验 + 系统级精确白名单；`guardProcesses` 进程守卫——浏览器、微信运行中自动跳过对应缓存项并记入日志 |
+| 👁️ **预览模式** | 只统计将释放的量，不删除任何文件、不执行任何命令、不改动服务状态——先看账单，再动手 |
+| 📊 **效果可观测** | 清理汇总以 **C 盘可用空间差**为准（拒绝纸面数字）；逐项释放量与失败明细（被占用/权限不足的具体路径）落盘审计日志 |
+| 📈 **增长分析** | 按「最后写入时间」找出最近 3/7/14 天新写入的大文件排行，直接回答「**谁在吃我的 C 盘**」——遗留的 WPR 追踪、失控的 CBS 日志一网打尽 |
+| 🧩 **JSON 规则引擎** | 64 条规则外置于 `rules.default.json`，放一份 `rules.user.json` 即可增改规则，**无需重新编译**（对标 Winapp2.ini 的规则库思路） |
+| 🖥️ **系统级瘦身** | 回收站、系统还原点（缩减上限保留最新）、WinSxS 组件存储（DISM）、Windows 升级残留（cleanmgr /autoclean）、Windows 更新缓存（自动停启服务） |
+| 🐳 **Docker/WSL 再生性清理** | `docker system prune` 按 df 差值计释放；vhdx 虚拟磁盘 `diskpart compact` 离线压缩——只回收空白，不碰数据 |
+| 🌍 **通用性** | 系统盘符运行时推导（Windows 不在 C 盘同样可用）；中英文系统输出与小数逗号 locale 兼容；Conda 安装位置动态发现 |
 
-*(待补充)*
+## 🚀 快速开始
 
-## 技术栈
+1. 前往 [**Releases 页面**](https://github.com/JiangSuRan/CacheCleaner/releases) 下载最新版 `CacheCleaner.exe`
+2. 双击运行（启动时弹出 UAC 提权确认——清理系统目录与重启删除登记需要管理员权限）
+3. 点击 **「🔍 扫描缓存」**，按大小降序查看所有可清理项
+4. 不放心？勾选 **「预览模式（不删除）」** 再点清理，先看将释放多少
+5. 点击 **「🧹 清理选中」**——完成后弹窗展示磁盘可用空间的真实增量
 
-- C# .NET 10.0 WinForms
-- 零外部依赖
-- Inno Setup 打包安装程序
+> 被占用的文件会自动登记为**重启删除**，并在汇总中如实告知；被跳过的项目附失败原因。
 
-## 开发构建
+## 📖 进阶用法
+
+### 自定义清理规则
+
+在 exe 同目录（便携场景）或 `%LOCALAPPDATA%\CacheCleaner\`（安装场景）放一份 `rules.user.json`，即可以声明式方式新增/覆盖规则，**无需重新编译**：
+
+```json
+[
+  {
+    "name": "MyApp 缓存",
+    "base": "localAppData",
+    "path": "MyApp\\Cache",
+    "desc": "MyApp 播放缓存，清理后自动重建",
+    "risk": "safe",
+    "guardProcesses": ["MyApp"]
+  },
+  {
+    "name": "某服务日志",
+    "base": "windows",
+    "path": "Logs\\MyService",
+    "desc": "仅清理 30 天前的 *.log",
+    "risk": "warn",
+    "clean": "files",
+    "filesPatterns": ["*.log"],
+    "minAgeDays": 30
+  }
+]
+```
+
+字段速查：`base`（`localAppData` / `appData` / `userProfile` / `windows` / `programData` / `driveRoot`）· `risk`（`safe` / `warn` / `danger`）· `kind`（`path` / `file` / `special`）· `clean`（`directory` / `files` / `reportOnly`）· `filesPatterns` · `minAgeDays` · `skipSize` · `guardProcesses`。
+
+### 增长基线监控
+
+仓库附带只读的增长基线脚本，定期运行即可看到各关键位置的增量排行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
+```
+
+### 审计日志
+
+每次扫描与清理自动记录到 `%LOCALAPPDATA%\CacheCleaner\logs\clean-日期.log`：条目大小、逐项释放量、被占用/权限不足的具体文件路径、磁盘可用空间前后差——「清理效果不理想」从此有据可查。
+
+## 🆕 版本演进（v3.4 → v3.9）
+
+| 版本 | 主题 | 亮点 |
+|---|---|---|
+| v3.4 | 修复 | 命令式清理死代码复活（还原点/内存转储首次生效）、释放量真实化、DISM 超时保护 |
+| v3.5 | 覆盖面 | VSIX 扩展缓存、CBS 日志、pnpm、GPU 着色器、UWP 缓存族、Firefox/Brave/Vivaldi、AI 工具旧版本 |
+| v3.6 | 可观测 | 审计日志、可用空间差口径、📈 增长分析、遗留追踪会话检测 |
+| v3.7 | 通用性 | 系统盘符运行时推导、Conda 动态发现、多语言/locale 兼容 |
+| v3.8 | 架构 | JSON 规则引擎 + 逐规则进程守卫 |
+| v3.9 | 体验 | 预览模式、设置持久化、Docker/WSL 再生性清理 |
+
+## 🛠️ 技术栈与构建
+
+- C# / .NET 10 WinForms，零外部依赖，自包含单文件发布
+- Inno Setup 打包安装程序（可选）
 
 ```bash
-# 还原并编译
+# 编译
 dotnet build -c Release
 
 # 发布自包含单文件
 dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
 
-# 生成安装包（需要 Inno Setup）
+# 生成安装包（需 Inno Setup）
 ISCC setup.iss
 ```
 
-## 许可证
+## 📁 项目结构
+
+```
+├── CacheScanner.cs      # 扫描/清理核心（规则引擎消费端、进程守卫、命令式清理框架）
+├── CleaningRules.cs     # JSON 规则加载器（内嵌默认 + 侧车覆盖）
+├── rules.default.json   # 内嵌声明式规则（64 条）
+├── CleanLog.cs          # 清理审计日志
+├── GrowthDialog.cs      # 增长分析页
+├── AppSettings.cs       # 设置持久化
+├── MainForm.cs          # 主界面
+├── cleanup/             # 增长基线监控脚本等辅助工具
+└── docs/upgrade-plan.md # 设计与演进记录
+```
+
+## 📸 截图
+
+*(待补充)*
+
+## 📄 许可证
 
 MIT
