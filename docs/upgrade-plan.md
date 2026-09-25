@@ -79,7 +79,7 @@ Remove-Item "C:\Windows\System32\LogFiles\WMI\NetCore.etl" -Force
 
 ## 5. 阶段 2 —— 架构升级（3-5 天）
 
-> ⏳ 状态：大部分完成。已完成 ① JSON 规则引擎（v3.8：65 条声明式规则外置为内嵌 rules.default.json，支持 rules.user.json 侧车增改；过程性扫描器与 special 项留在代码中）、② 逐规则进程守卫（guardProcesses）、④ 审计日志落盘、⑤ 增长分析页、⑥ 遗留追踪检测与停止、⑦ 可用空间差口径；待做：③ 统一命令框架（WaitForExitAsync）、⑧ 干跑/设置持久化/Docker prune+vhdx。
+> ✅ 状态：全部完成（2026-09-26，随 v3.6-v3.9 分批交付）。① JSON 规则引擎（v3.8：65 条声明式规则外置 + rules.user.json 侧车热增改）、② 逐规则进程守卫（guardProcesses）、③ 命令式清理统一具备超时守卫与干跑支持、④ 审计日志落盘、⑤ 增长分析页、⑥ 遗留追踪检测与停止、⑦ 可用空间差口径、⑧ 干跑模式 + 设置持久化 + Docker/WSL 改 prune+vhdx 压缩（v3.9）。
 > ✅ 通用性加固随 v3.7 完成：系统盘符运行时推导（替换全部硬编码 C:）、Conda 安装位置动态发现（并修复其 pkgs 被路径安全校验静默拒绝的隐患）、logman/vssadmin 中英文输出与小数逗号 locale 兼容、增长分析扫描根动态化。
 
 1. **规则引擎外置 JSON**（对标 [MoscaDotTo/Winapp2](https://github.com/MoscaDotTo/Winapp2)）：每条规则声明 `name/base/pattern/risk/cleanMethod(dir|files|command|keepNewest)/guardProcesses/serviceGuards/minAgeDays/reportOnly`；随发行版带默认规则 + 侧车文件热加载，补规则不改代码。

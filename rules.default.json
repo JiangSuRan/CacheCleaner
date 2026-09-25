@@ -330,13 +330,6 @@
     "risk": "safe"
   },
   {
-    "name": "Docker 镜像/容器",
-    "base": "localAppData",
-    "path": "Docker",
-    "desc": "Docker Desktop 所有数据（镜像+容器+卷），删除后不可恢复，慎重",
-    "risk": "danger"
-  },
-  {
     "name": "Windows 更新下载缓存",
     "base": "windows",
     "path": "SoftwareDistribution\\Download",

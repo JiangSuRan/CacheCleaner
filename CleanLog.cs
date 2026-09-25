@@ -40,12 +40,12 @@ public static class CleanLog
         Write(lines);
     }
 
-    /// <summary>记录清理开始与起始可用空间</summary>
-    public static void LogCleanStart(int itemCount, long freeBytesBefore)
+    /// <summary>记录清理开始与起始可用空间（预览模式时在日志中标注）</summary>
+    public static void LogCleanStart(int itemCount, long freeBytesBefore, bool dryRun)
     {
         Write(new List<string>
         {
-            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] === 清理开始：{itemCount} 项，C 盘可用 {CacheScanner.FormatSize(freeBytesBefore)} ==="
+            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] === 清理开始：{itemCount} 项，C 盘可用 {CacheScanner.FormatSize(freeBytesBefore)}{(dryRun ? "（预览模式，未删除）" : "")} ==="
         });
     }
 

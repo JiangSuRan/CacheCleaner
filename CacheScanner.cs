@@ -90,6 +90,11 @@ public static class CacheScanner
     // 系统盘盘符（如 'C'），用于 vssadmin 等命令行参数
     internal static readonly char SysDriveLetter = SysRoot[0];
 
+    /// <summary>
+    /// 预览（干跑）模式：只统计将释放的量，不删除任何文件、不执行任何命令、不改动服务状态
+    /// </summary>
+    public static bool DryRun { get; set; }
+
     private static string InitSysRoot()
     {
         var root = Path.GetPathRoot(Environment.SystemDirectory);
@@ -332,6 +337,9 @@ public static class CacheScanner
         // 遗留性能追踪会话（WPR 录制/手动内核追踪），持续写盘的经典增长源
         ScanLeftoverTraces(items, progress, ref current, ref total, cancellationToken);
 
+        // Docker/WSL：prune 可回收量 + vhdx 虚拟磁盘压缩（取代旧整删危险项）
+        ScanDockerWsl(items, progress, ref current, ref total, cancellationToken);
+
         return items;
     }
 
@@ -507,6 +515,13 @@ public static class CacheScanner
         if (item.Name == "遗留性能追踪会话")
             return CleanLeftoverTraces();
 
+        // Docker/WSL：prune 与 vhdx 压缩均为官方再生性操作，取代旧的整删危险项
+        if (item.Name == "Docker 未使用数据")
+            return CleanDockerPrune(progress);
+
+        if (item.Name == "WSL/Docker 虚拟磁盘")
+            return CleanWslVhdx(progress, cancellationToken);
+
         // UWP 缓存族项的 Path 是 Packages 根目录，实际按名称携带的子族逐包清理
         if (item.Name.StartsWith("UWP "))
             return CleanUwpCacheFamily(item, cancellationToken);
@@ -555,7 +570,7 @@ public static class CacheScanner
                     : CleanFiles(item.Path, pattern);
             }
 
-            if (patternTotal.FreedBytes > 0)
+            if (patternTotal.FreedBytes > 0 && !DryRun)
             {
                 item.SizeBytes = Math.Max(0, item.SizeBytes - patternTotal.FreedBytes);
                 if (item.SizeBytes == 0) item.Exists = false;
@@ -577,7 +592,8 @@ public static class CacheScanner
             _ => CleanDirectory(item.Path, cancellationToken),
         };
 
-        if (result.FreedBytes > 0)
+        // 预览模式不改写条目状态，保持列表原样供用户核对
+        if (!DryRun && result.FreedBytes > 0)
         {
             item.SizeBytes = Math.Max(0, item.SizeBytes - result.FreedBytes);
             if (item.SizeBytes == 0) item.Exists = false;
@@ -653,6 +669,11 @@ public static class CacheScanner
     private static CleanResult CleanPipCache(CacheItem item, IProgress<string>? progress)
     {
         long sizeBefore = item.SizeBytes;
+        if (DryRun)
+        {
+            // 预览模式：purge 会清空整个缓存目录，按当前占用计将释放量
+            return new CleanResult(sizeBefore, 0, 0, 0, 0, 0);
+        }
         try
         {
             progress?.Report("正在执行 pip cache purge...");
@@ -688,6 +709,13 @@ public static class CacheScanner
                 try
                 {
                     long len = file.Length;
+                    if (DryRun)
+                    {
+                        // 预览模式：不删除，仅统计将释放的量
+                        freed += len;
+                        deleted++;
+                        continue;
+                    }
                     file.Delete();
                     // 删除成功才计入释放量：登记重启删除的文件尚未真正释放，不能虚报
                     freed += len;
@@ -744,6 +772,13 @@ public static class CacheScanner
                 try
                 {
                     long len = file.Length;
+                    if (DryRun)
+                    {
+                        // 预览模式：不删除，仅统计将释放的量
+                        freed += len;
+                        deleted++;
+                        continue;
+                    }
                     file.Delete();
                     // 删除成功才计入释放量：登记重启删除的文件尚未真正释放，不能虚报
                     freed += len;
@@ -776,6 +811,11 @@ public static class CacheScanner
         try
         {
             long len = new FileInfo(filePath).Length;
+            if (DryRun)
+            {
+                // 预览模式：不删除，仅统计将释放的量
+                return new CleanResult(len, 1, 0, 0, 0, 0);
+            }
             File.Delete(filePath);
             return new CleanResult(len, 1, 0, 0, 0, 0);
         }
@@ -810,6 +850,13 @@ public static class CacheScanner
                 try
                 {
                     long len = file.Length;
+                    if (DryRun)
+                    {
+                        // 预览模式：不删除，仅统计将释放的量
+                        freed += len;
+                        deleted++;
+                        continue;
+                    }
                     file.Delete();
                     // 删除成功才计入释放量：登记重启删除的文件尚未真正释放，不能虚报
                     freed += len;
@@ -956,6 +1003,13 @@ public static class CacheScanner
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 long size = SumFiles(versions[i]);
+                if (DryRun)
+                {
+                    // 预览模式：不删除，仅统计将释放的量
+                    freed += size;
+                    deleted++;
+                    continue;
+                }
                 try { Directory.Delete(versions[i], true); freed += size; deleted++; }
                 catch (Exception ex) { other++; Debug.WriteLine($"删除旧版本失败 {versions[i]}: {ex.Message}"); }
             }
@@ -1542,6 +1596,13 @@ public static class CacheScanner
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     long size = SumFiles(versions[i].FullName);
+                    if (DryRun)
+                    {
+                        // 预览模式：不删除，仅统计将释放的量
+                        freed += size;
+                        deleted++;
+                        continue;
+                    }
                     try
                     {
                         versions[i].Delete(true);
@@ -1583,6 +1644,13 @@ public static class CacheScanner
                     try
                     {
                         long len = file.Length;
+                        if (DryRun)
+                        {
+                            // 预览模式：不删除，仅统计将释放的量
+                            freed += len;
+                            deleted++;
+                            continue;
+                        }
                         file.Delete();
                         // 删除成功才计入释放量
                         freed += len;
@@ -1621,8 +1689,9 @@ public static class CacheScanner
         /// </summary>
         private static CleanResult CleanWindowsUpdateCache(string downloadDir, CancellationToken cancellationToken)
         {
-            bool wuauservStopped = RunCommand("net", "stop wuauserv", 30_000);
-            bool bitsStopped = RunCommand("net", "stop bits", 30_000);
+            // 预览模式不触碰服务状态；CleanDirectory 内部自行走干跑统计
+            bool wuauservStopped = !DryRun && RunCommand("net", "stop wuauserv", 30_000);
+            bool bitsStopped = !DryRun && RunCommand("net", "stop bits", 30_000);
             CleanResult result;
             try
             {
@@ -1643,6 +1712,7 @@ public static class CacheScanner
         /// </summary>
         private static CleanResult CleanDeliveryOptimizationCache(CacheItem item)
         {
+            if (DryRun) return new CleanResult(0, 1, 0, 0, 0, 0);   // 预览：跳过官方 cmdlet
             long before = SumFiles(item.Path);
             bool ok = RunCommand("powershell", "-NoProfile -Command \"Delete-DeliveryOptimizationCache -Force\"", 120_000);
             if (!ok) return new CleanResult(0, 0, 0, 0, 1, 0);
@@ -1658,8 +1728,13 @@ public static class CacheScanner
         /// </summary>
         private static CleanResult CleanUpgradeRemnants(IProgress<string>? progress)
         {
-            progress?.Report("正在执行 cleanmgr /autoclean（系统磁盘清理，可能需要数分钟）...");
-            bool ok = RunCommand("cleanmgr", "/autoclean", 3_600_000);
+        if (DryRun)
+        {
+            progress?.Report("预览模式：跳过执行 cleanmgr /autoclean");
+            return new CleanResult(0, 1, 0, 0, 0, 0);
+        }
+        progress?.Report("正在执行 cleanmgr /autoclean（系统磁盘清理，可能需要数分钟）...");
+        bool ok = RunCommand("cleanmgr", "/autoclean", 3_600_000);
             return new CleanResult(0, ok ? 1 : 0, 0, 0, ok ? 0 : 1, 0);
         }
 
@@ -1739,6 +1814,12 @@ public static class CacheScanner
     /// </summary>
     private static CleanResult ShrinkShadowStorage(CacheItem item, IProgress<string>? progress)
     {
+        if (DryRun)
+        {
+            // 预览：缩减到 3GB 上限后的预计回收量
+            progress?.Report("预览模式：跳过执行 vssadmin");
+            return new CleanResult(Math.Max(0, item.SizeBytes - 3L * 1024 * 1024 * 1024), 1, 0, 0, 0, 0);
+        }
         progress?.Report("正在缩减还原点存储上限到 3GB...");
         bool ok = RunCommand("vssadmin",
             $"resize shadowstorage /for={SysDriveLetter}: /on={SysDriveLetter}: /maxsize=3GB", 120_000);
@@ -1753,6 +1834,11 @@ public static class CacheScanner
     /// </summary>
     private static CleanResult RunComponentCleanup(CacheItem item, IProgress<string>? progress, CancellationToken cancellationToken)
     {
+        if (DryRun)
+        {
+            progress?.Report("预览模式：跳过执行 DISM 组件清理");
+            return new CleanResult(0, 1, 0, 0, 0, 0);
+        }
         progress?.Report("正在执行 DISM 组件清理（15-30 分钟，请耐心等待）...");
         cancellationToken.ThrowIfCancellationRequested();
         // 超时上限 2 小时：老机器首次组件清理可能远超 30 分钟，被超时误判为失败会误导用户
@@ -2103,6 +2189,11 @@ public static class CacheScanner
     /// </summary>
     private static CleanResult CleanLeftoverTraces()
     {
+        if (DryRun)
+        {
+            // 预览：按将要停止的会话数计
+            return new CleanResult(0, QueryLeftoverTraceSessions().Count, 0, 0, 0, 0);
+        }
         var sessions = QueryLeftoverTraceSessions();
         if (sessions.Count == 0) return new CleanResult(0, 1, 0, 0, 0, 0);
 
@@ -2113,6 +2204,204 @@ public static class CacheScanner
             else failed++;
         }
         return new CleanResult(0, stopped, 0, 0, failed, 0);
+    }
+
+    /// <summary>
+    /// 扫描 Docker/WSL：vhdx 虚拟磁盘（只增不减，可压缩回收）与 Docker 未使用数据（prune 可回收量）。
+    /// 取代旧的「整删 Docker 数据」危险项——prune 与 compact 均为官方支持的再生性操作。
+    /// Docker daemon 未运行时不显示 prune 项（Docker Desktop 启动后可见）。
+    /// </summary>
+    private static void ScanDockerWsl(
+        List<CacheItem> items,
+        IProgress<(int current, int total, string name)>? progress,
+        ref int current,
+        ref int total,
+        CancellationToken cancellationToken)
+    {
+        // —— WSL/Docker vhdx 虚拟磁盘 ——
+        var vhdxFiles = CollectVhdxFiles(cancellationToken);
+        long vhdxTotal = 0;
+        foreach (var f in vhdxFiles)
+        {
+            try { vhdxTotal += f.Length; } catch { }
+        }
+
+        if (vhdxTotal >= 512L * 1024 * 1024)
+        {
+            total++;
+            current++;
+            progress?.Report((current, total, "WSL/Docker 虚拟磁盘"));
+            items.Add(new CacheItem
+            {
+                Name = "WSL/Docker 虚拟磁盘",
+                Path = "（命令式清理）",
+                Desc = $"{vhdxFiles.Count} 个 vhdx 虚拟磁盘，只增不减；清理 = 离线压缩回收空白（需先关闭 WSL/Docker，运行中的发行版会被强制关闭）",
+                Risk = RiskLevel.Warn,
+                Exists = true,
+                SizeBytes = vhdxTotal
+            });
+        }
+
+        // —— Docker 未使用数据（prune）——
+        var (dockerOk, _) = RunCommandOutput("docker", "info", 15_000);
+        if (!dockerOk) return;
+
+        var (_, dfOutput) = RunCommandOutput("docker", "system df", 20_000);
+        long reclaimable = ParseDockerReclaimable(dfOutput);
+        if (reclaimable < 100L * 1024 * 1024) return;
+
+        total++;
+        current++;
+        progress?.Report((current, total, "Docker 未使用数据"));
+        items.Add(new CacheItem
+        {
+            Name = "Docker 未使用数据",
+            Path = "（命令式清理）",
+            Desc = "未使用的镜像/容器/卷/构建缓存（docker system prune -a --volumes），运行中的容器不受影响",
+            Risk = RiskLevel.Warn,
+            Exists = true,
+            SizeBytes = reclaimable
+        });
+    }
+
+    /// <summary>
+    /// 收集 WSL/Docker 的 vhdx 虚拟磁盘文件（扫描与压缩共用同一套根，保证口径一致）
+    /// </summary>
+    private static List<FileInfo> CollectVhdxFiles(CancellationToken cancellationToken)
+    {
+        var files = new List<FileInfo>();
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var roots = new[]
+        {
+            Path.Combine(localAppData, "Docker", "wsl"),
+            Path.Combine(localAppData, "wsl"),
+            Path.Combine(localAppData, "Packages")
+        };
+        var options = new EnumerationOptions
+        {
+            IgnoreInaccessible = true,
+            RecurseSubdirectories = true,
+            AttributesToSkip = FileAttributes.ReparsePoint
+        };
+
+        foreach (var root in roots)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!Directory.Exists(root)) continue;
+            try
+            {
+                files.AddRange(new DirectoryInfo(root).EnumerateFiles("*.vhdx", options));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"枚举 vhdx 失败 {root}: {ex.Message}");
+            }
+        }
+        return files;
+    }
+
+    /// <summary>
+    /// 解析 docker system df 输出中各行的 RECLAIMABLE 列（带百分比后缀的列）并求和
+    /// </summary>
+    private static long ParseDockerReclaimable(string output)
+    {
+        long total = 0;
+        foreach (var line in output.Split('\n'))
+        {
+            // RECLAIMABLE 列形如 "800MB (55%)"，SIZE 列无百分比，靠后缀区分
+            var m = Regex.Match(line, @"([\d.]+)\s*(B|KB|MB|GB|TB)\s*\(\d+%");
+            if (!m.Success) continue;
+            if (!double.TryParse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture, out var value))
+                continue;
+            total += m.Groups[2].Value.ToUpperInvariant() switch
+            {
+                "TB" => (long)(value * 1024L * 1024 * 1024 * 1024),
+                "GB" => (long)(value * 1024L * 1024 * 1024),
+                "MB" => (long)(value * 1024L * 1024),
+                "KB" => (long)(value * 1024),
+                _ => (long)value
+            };
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// Docker 未使用数据清理：以 prune 前后 docker system df 差值计释放量
+    /// </summary>
+    private static CleanResult CleanDockerPrune(IProgress<string>? progress)
+    {
+        if (DryRun)
+        {
+            progress?.Report("预览模式：跳过执行 docker system prune");
+            return new CleanResult(0, 1, 0, 0, 0, 0);
+        }
+
+        var (_, beforeDf) = RunCommandOutput("docker", "system df", 20_000);
+        long beforeBytes = ParseDockerReclaimable(beforeDf);
+
+        progress?.Report("正在执行 docker system prune -a --volumes（可能需要数分钟）...");
+        bool ok = RunCommand("docker", "system prune -a --volumes -f", 1_800_000);
+        if (!ok) return new CleanResult(0, 0, 0, 0, 1, 0);
+
+        var (_, afterDf) = RunCommandOutput("docker", "system df", 20_000);
+        long afterBytes = ParseDockerReclaimable(afterDf);
+        return new CleanResult(Math.Max(0, beforeBytes - afterBytes), 1, 0, 0, 0, 0);
+    }
+
+    /// <summary>
+    /// WSL/Docker vhdx 离线压缩：wsl --shutdown 后逐盘 diskpart compact vdisk，
+    /// 释放量 = 压缩前后文件实际大小差。压缩是官方再生性操作，不删除任何数据。
+    /// </summary>
+    private static CleanResult CleanWslVhdx(IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        if (DryRun)
+        {
+            progress?.Report("预览模式：跳过 vhdx 压缩（实际执行需先关闭 WSL/Docker）");
+            return new CleanResult(0, 1, 0, 0, 0, 0);
+        }
+
+        var files = CollectVhdxFiles(cancellationToken);
+        if (files.Count == 0) return default;
+
+        long SizeSum()
+        {
+            long t = 0;
+            foreach (var f in files)
+            {
+                try { t += f.Length; } catch { }
+            }
+            return t;
+        }
+
+        progress?.Report("正在关闭 WSL（Docker Desktop 的 WSL 后端随之停止）...");
+        RunCommand("wsl", "--shutdown", 30_000);
+
+        long before = SizeSum();
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"cachecleaner-compact-{Guid.NewGuid():N}.txt");
+        try
+        {
+            foreach (var file in files)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    File.WriteAllText(scriptPath,
+                        $"select vdisk file=\"{file.FullName}\"\r\nattach vdisk readonly\r\ncompact vdisk\r\ndetach vdisk\r\n");
+                    if (!RunCommand("diskpart", $"/s \"{scriptPath}\"", 1_800_000))
+                        CleanLog.NoteFailure($"vhdx 压缩失败: {file.FullName}");
+                }
+                catch (Exception ex)
+                {
+                    CleanLog.NoteFailure($"vhdx 压缩失败 {file.FullName}: {ex.Message}");
+                }
+            }
+        }
+        finally
+        {
+            try { if (File.Exists(scriptPath)) File.Delete(scriptPath); } catch { }
+        }
+
+        return new CleanResult(Math.Max(0, before - SizeSum()), 1, 0, 0, 0, 0);
     }
 
     /// <summary>
@@ -2156,6 +2445,7 @@ public static class CacheScanner
     /// </summary>
     private static CleanResult FlushDnsCache()
     {
+        if (DryRun) return new CleanResult(0, 1, 0, 0, 0, 0);   // 预览：DNS 刷新无字节可计
         bool ok = RunCommand("ipconfig", "/flushdns");
         // DNS 缓存不以字节计；DeletedCount 借用为「已刷新」标记，失败计入 OtherFailureCount
         return new CleanResult(0, ok ? 1 : 0, 0, 0, ok ? 0 : 1, 0);

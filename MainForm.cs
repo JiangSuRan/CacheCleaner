@@ -38,6 +38,7 @@ public class MainForm : Form
     private Button btnSelectNone = null!;
     private Button btnCancel = null!;
     private Button btnGrowth = null!;
+    private CheckBox chkPreview = null!;
     private ProgressBar progressBar = null!;
     private Label lblStatus = null!;
     private Label lblTotal = null!;
@@ -48,6 +49,18 @@ public class MainForm : Form
     {
         SetupForm();
         SetupControls();
+
+        // 设置持久化：恢复预览开关；关闭窗口时保存当前勾选
+        AppSettings.Load();
+        chkPreview.Checked = AppSettings.PreviewMode;
+        FormClosing += (_, _) =>
+        {
+            var names = new List<string>();
+            for (int i = 0; i < dgv.Rows.Count; i++)
+                if (dgv.Rows[i].Cells["Checked"].Value is true)
+                    names.Add(dgv.Rows[i].Cells["Name"].Value?.ToString() ?? "");
+            AppSettings.Save(chkPreview.Checked, names);
+        };
     }
 
     protected override void OnPaintBackground(PaintEventArgs e)
@@ -76,7 +89,7 @@ public class MainForm : Form
 
     private void SetupForm()
     {
-        Text = "C盘缓存清理工具 v3.8";
+        Text = "C盘缓存清理工具 v3.9";
         Size = new Size(820, 600);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -200,7 +213,16 @@ public class MainForm : Form
             Size = new Size(200, 35),
             BackColor = Color.Transparent
         };
-        statusPanel.Controls.AddRange([lblStatus, lblTotal]);
+        // 预览模式开关（持久化）；加入顺序使其先于 Right/Fill 布局（WinForms 逆序停靠）
+        chkPreview = new CheckBox
+        {
+            Text = "预览模式（不删除）",
+            Dock = DockStyle.Left,
+            Width = 132,
+            Font = FontSmall,
+            BackColor = Color.Transparent
+        };
+        statusPanel.Controls.AddRange([lblStatus, lblTotal, chkPreview]);
         Controls.Add(statusPanel);
 
         // 数据表格（使用自定义透明 DataGridView）
@@ -470,9 +492,15 @@ public class MainForm : Form
         if (!isKnown)
             dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(225, 235, 255);
 
-        // 仅已知规则的安全项默认勾选；自动发现按目录名匹配（≠纯缓存），一律交由用户逐项确认
-        if (isKnown && item.Risk == RiskLevel.Safe)
-            dgv.Rows[rowIdx].Cells["Checked"].Value = true;
+        // 默认勾选：有上次清理记录时按记录恢复；首次使用（无记录）按已知安全项自动勾选；
+        // 自动发现按目录名匹配（≠纯缓存），一律交由用户逐项确认
+        if (isKnown)
+        {
+            bool check = AppSettings.HasCheckedSnapshot
+                ? AppSettings.CheckedNames.Contains(item.Name)
+                : item.Risk == RiskLevel.Safe;
+            dgv.Rows[rowIdx].Cells["Checked"].Value = check;
+        }
     }
 
     /// <summary>
@@ -516,6 +544,10 @@ public class MainForm : Form
         if (runningApps.Count > 0)
             warning += $"\n\n检测到以下程序正在运行，其缓存可能被占用：\n  {string.Join("、", runningApps)}\n建议先关闭后再清理，否则相关文件将被跳过或登记为重启删除。";
 
+        bool dryRun = chkPreview.Checked;
+        if (dryRun)
+            warning = "【预览模式】不会删除任何文件，仅统计将释放的空间。\n" + warning;
+
         var result = MessageBox.Show(
             $"确认清理 {selectedItems.Count} 个项目？{warning}",
             "确认清理",
@@ -525,9 +557,17 @@ public class MainForm : Form
 
         if (result != DialogResult.OK) return;
 
+        // 设置持久化：本次勾选与预览开关（下次扫描按记录恢复勾选）
+        var checkedNames = new List<string>();
+        for (int i = 0; i < dgv.Rows.Count; i++)
+            if (dgv.Rows[i].Cells["Checked"].Value is true)
+                checkedNames.Add(dgv.Rows[i].Cells["Name"].Value?.ToString() ?? "");
+        AppSettings.Save(chkPreview.Checked, checkedNames);
+
         // 释放量的诚实口径：以 C 盘可用空间差为准（其他程序并发写入也会影响该差值）
         long freeBefore = CacheScanner.GetCFreeBytes();
-        CleanLog.LogCleanStart(selectedItems.Count, freeBefore);
+        CleanLog.LogCleanStart(selectedItems.Count, freeBefore, dryRun);
+        CacheScanner.DryRun = dryRun;
 
         SetControlsEnabled(false);
         progressBar.Visible = true;
@@ -553,8 +593,12 @@ public class MainForm : Form
                 total += itemResult;
                 CleanLog.LogCleanItem(name, path, itemResult);
 
-                // FreedBytes>0 表示释放了空间；DeletedCount>0 覆盖命令式项（如 DNS 刷新成功但不计字节）
-                if (itemResult.FreedBytes > 0 || itemResult.DeletedCount > 0)
+                // 预览：仅高亮不改大小；FreedBytes>0 表示释放了空间；DeletedCount>0 覆盖命令式项
+                if (dryRun)
+                {
+                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(255, 243, 205);
+                }
+                else if (itemResult.FreedBytes > 0 || itemResult.DeletedCount > 0)
                 {
                     dgv.Rows[rowIdx].Cells["Size"].Value = item.SizeBytes;
                     dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(212, 237, 218);
@@ -568,13 +612,15 @@ public class MainForm : Form
             string freedStr = CacheScanner.FormatSize(total.FreedBytes);
             long freeAfter = CacheScanner.GetCFreeBytes();
             string statusDetail = total.TotalFailures > 0 ? $"（跳过 {total.TotalFailures} 个）" : "";
-            lblStatus.Text = $"  清理完成！共释放 {freedStr} {statusDetail}。C 盘可用 +{CacheScanner.FormatSize(Math.Max(0, freeAfter - freeBefore))}";
-            lblTotal.Text = $"释放: {freedStr}  ";
+            lblStatus.Text = dryRun
+                ? $"  预览完成！将释放 {freedStr} {statusDetail}（未实际删除）。"
+                : $"  清理完成！共释放 {freedStr} {statusDetail}。C 盘可用 +{CacheScanner.FormatSize(Math.Max(0, freeAfter - freeBefore))}";
+            lblTotal.Text = $"{(dryRun ? "将释放" : "释放")}: {freedStr}  ";
             lblTotal.ForeColor = SuccessGreen;
 
             MessageBox.Show(
-                BuildCleanSummary(total, freedStr, freeBefore, freeAfter),
-                "清理完成",
+                BuildCleanSummary(total, freedStr, freeBefore, freeAfter, dryRun),
+                dryRun ? "预览完成（未删除任何文件）" : "清理完成",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information
             );
@@ -591,6 +637,7 @@ public class MainForm : Form
         }
         finally
         {
+            CacheScanner.DryRun = false;
             progressBar.Visible = false;
             SetControlsEnabled(true);
             _cts?.Dispose();
@@ -599,11 +646,14 @@ public class MainForm : Form
     }
 
     /// <summary>
-    /// 构建清理完成汇总文案：释放量 + 删除文件数 + 失败/待处理明细 + 磁盘可用空间前后差
+    /// 构建清理完成汇总文案：释放量 + 删除文件数 + 失败/待处理明细 + 磁盘可用空间前后差。
+    /// 预览模式改为「将释放」口径，不展示磁盘差值（未实际删除，差值无意义）。
     /// </summary>
-    private static string BuildCleanSummary(CleanResult total, string freedStr, long freeBefore, long freeAfter)
+    private static string BuildCleanSummary(CleanResult total, string freedStr, long freeBefore, long freeAfter, bool dryRun)
     {
-        var summary = $"清理完成！\n\n共释放: {freedStr}\n删除 {total.DeletedCount} 个文件";
+        var summary = dryRun
+            ? $"预览完成（未删除任何文件）！\n\n将释放: {freedStr}\n涉及 {total.DeletedCount} 个文件/命令"
+            : $"清理完成！\n\n共释放: {freedStr}\n删除 {total.DeletedCount} 个文件";
 
         var detailParts = new List<string>();
         if (total.LockedCount > 0) detailParts.Add($"{total.LockedCount} 个被占用");
@@ -618,9 +668,16 @@ public class MainForm : Form
                 summary += "\n\n提示：被占用的文件通常是相关程序正在运行，关闭程序后再次清理即可。";
         }
 
-        summary += $"\n\nC 盘可用空间: {CacheScanner.FormatSize(freeBefore)} → {CacheScanner.FormatSize(freeAfter)}" +
-                   $"（净增 {CacheScanner.FormatSize(Math.Max(0, freeAfter - freeBefore))}）";
-        summary += "\n（文件累计与磁盘差值可能不同：其他程序同时在写入，重启删除的空间在重启后才回收）";
+        if (dryRun)
+        {
+            summary += "\n\n关闭「预览模式」后重新执行即可实际清理。";
+        }
+        else
+        {
+            summary += $"\n\nC 盘可用空间: {CacheScanner.FormatSize(freeBefore)} → {CacheScanner.FormatSize(freeAfter)}" +
+                       $"（净增 {CacheScanner.FormatSize(Math.Max(0, freeAfter - freeBefore))}）";
+            summary += "\n（文件累计与磁盘差值可能不同：其他程序同时在写入，重启删除的空间在重启后才回收）";
+        }
 
         return summary;
     }
