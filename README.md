@@ -18,6 +18,8 @@
 
 *自包含单文件 · 免安装 · 零依赖 · 数据安全优先 · 全程可审计*
 
+**简体中文** · [English](#-english)
+
 </div>
 
 ---
@@ -138,24 +140,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 - ♿ **无障碍友好** — 全自绘按钮保留 PushButton 无障碍角色、屏幕阅读器名称与 Tab/Space/Enter 键盘操作
 - 🖼️ **一体化界面** — 无边框窗口、三档按钮层级与动态主按钮、细圆角进度条，100% 缩放下实机验证
 
-## 🆕 版本演进
-
-| 版本 | 主题 | 亮点 |
-|---|---|---|
-| v5.1.1 | 清理流程修复 | 命令输出并行读取与可取消等待；逐项处理结果、真实残留大小、只读项排除、预览无删除、失败继续与结束审计 |
-| v5.1 | 界面一体化改版 | 无边框窗口 + 自绘标题栏 + DWM 圆角，双层头部、三档按钮层级（动态主按钮）、圆角列表面板 + 状态标签、插画渐变背景、细圆角进度条、结构化状态区；修复构造期布局崩溃与按钮重绘遮挡 |
-| v5.0 | 项目工程清理 | 产物注册表 + 项目检测扫描器 + 陈旧度分级（源自 kondo/npkill 社区调研） |
-| v4.3 | 目录扩充 | DeepSeek Harness/Zed/Cline/Copilot CLI/Amp/Droid/CodeBuddy/pi 收录（全部源码级核实） |
-| v4.2 | IDE 与内置 AI | JetBrains 系统缓存扫描器、C++ ipch/Copilot Chat 规则、Windsurf/ZCode 收录 |
-| v4.1 | Agent 目录 | 10 个 agent 收录清单（签名探测/置信分级/neverTouch）+ 未收录探测器 |
-| v4.0 | Agent 时代 | Agent dot-home 规则包、官方 prune 命令集成、模型仓库报告、迁盘顾问 |
-| v3.9 | 体验 | 预览模式、设置持久化、Docker/WSL 再生性清理 |
-| v3.8 | 架构 | JSON 规则引擎 + 逐规则进程守卫 |
-| v3.7 | 通用性 | 系统盘符运行时推导、Conda 动态发现、多语言/locale 兼容 |
-| v3.6 | 可观测 | 审计日志、可用空间差口径、📈 增长分析、遗留追踪会话检测 |
-| v3.5 | 覆盖面 | VSIX 扩展缓存、CBS 日志、pnpm、GPU 着色器、UWP 缓存族、Firefox/Brave/Vivaldi、AI 工具旧版本 |
-| v3.4 | 修复 | 命令式清理死代码复活（还原点/内存转储首次生效）、释放量真实化、DISM 超时保护 |
-
 ## 🛠️ 技术栈与构建
 
 - C# / .NET 10 WinForms，零外部依赖，自包含单文件发布
@@ -201,12 +185,178 @@ ISCC setup.iss
 └── docs/                  # 设计演进记录 + Agent 时代调研 + 目录分析
 ```
 
-## 📸 截图
+---
 
-| 主界面 | 扫描完成（按大小降序 · 三级风险标注 · 逐项处理结果） |
+<div align="center">
+
+## 🌐 English
+
+**Disk governance for the AI era**
+
+**Agents · CLIs · IDEs · Built-in AI · Model repos · Project artifacts — one exe covers them all**
+
+[![Release](https://img.shields.io/github/v/release/JiangSuRan/CacheCleaner?color=blue&label=Latest)](https://github.com/JiangSuRan/CacheCleaner/releases)
+[![.NET](https://img.shields.io/badge/.NET-10.0-blueviolet)](https://dotnet.microsoft.com/)
+[![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](https://github.com/JiangSuRan/CacheCleaner/releases)
+[![License](https://img.shields.io/badge/License-MIT-green)](#-license--许可证)
+
+[![Rules](https://img.shields.io/badge/Rules-87-teal)](#-core-capabilities)
+[![Agents](https://img.shields.io/badge/Agents-18-blue)](#-agent-catalog)
+[![Artifacts](https://img.shields.io/badge/Reproducible_artifacts-26-orange)](#-core-capabilities)
+[![Tests](https://img.shields.io/badge/Regression_tests-15_passing-success)](tests/Regression/)
+
+*Self-contained single file · Portable · Zero dependencies · Safety first · Fully auditable*
+
+[简体中文](#-cachecleaner) · **English**
+
+</div>
+
+---
+
+## ✨ Why
+
+The rise of AI agents and CLIs has created a generation of disk bloat that traditional cleaners simply don't understand: **session transcripts** that only grow, **model weights** weighing tens of GB, **self-updates** piling up old versions, **content-addressable stores** designed to never shrink — and every tool claiming its own dot-home in your user profile. The community has reported it at scale: issues of `~/.claude` reaching 3.6 GB, and the Cursor "clean cache" incident that wiped 300 GB. A cleaner that doesn't understand semantics either deletes nothing — or deletes the wrong things.
+
+CacheCleaner's answer is a **semantics-aware rule engine**: 87 effective rules across six location classes, backed by three-tier risk labels, process guards, preview mode and end-to-end auditing — with curation maintained as a sustainable **agent catalog**. Known locations are handled automatically; unknown ones stay visible.
+
+## 🎯 Core Capabilities
+
+| Capability | Description |
 |---|---|
-| ![主界面](docs/screenshots/main.png) | ![扫描结果](docs/screenshots/scan.png) |
+| 🔍 **Three-phase smart scan** | Scans 70+ built-in rule locations in seconds, then walks the user profile to discover caches of unknown apps (supports `.cache` / `.tmp` / `.logs` dot-directories), and finally enumerates reproducible project artifacts — items hide themselves when a path doesn't exist |
+| 🛡️ **Three-tier safety** | Safe / caution / danger risk labels; path validation + system-level exact whitelists; per-rule `guardProcesses` — browser and WeChat caches are skipped while those apps run, and every skip is logged |
+| 👁️ **Preview mode** | Only measures what would be freed — deletes no files, runs no commands, touches no service state. See the bill before you pay it |
+| 📊 **Real observability** | Cleanup summaries are based on the **free-space delta** (no paper numbers); per-item freed amounts and failure details (the exact occupied or unauthorized paths) land in audit logs |
+| ♻️ **Reliable cleanup pipeline** | Command-based cleanups read output in parallel with bounded polling and stay cancellable — system maintenance processes (DISM etc.) keep running in the background, never killed; a per-item **Result** column (success / failed / skipped / reboot pending) with **real leftover sizes** verified after cleaning; one item failing never stops the run; every ending writes an audit summary |
+| 📈 **Growth analysis** | Ranks large files written in the last 3/7/14 days by last-write time — directly answers "**what's eating my disk**"; offers a **migration advisor** command for big relocatable caches |
+| 🧩 **JSON rule engine** | 71 built-in rules + 16 compiled from the agent catalog; drop a `rules.user.json` beside the exe to add or override rules — **no recompiling** (in the spirit of Winapp2.ini) |
+| 🤖 **Agent catalog** | Curated coverage for 18 mainstream agents (Claude Code / Codex / Gemini CLI / Qwen / OpenCode / Amazon Q / Goose / Crush / Tongyi Lingma / MarsCode and more), each with detection signatures, neverTouch whitelists, confidence tiers and verified dates |
+| 🗺️ **Unknown detector** | Large tool directories in the user profile that aren't covered are listed read-only — **known is automatic, unknown stays visible** |
+| 🖥️ **System-level slimming** | Recycle Bin, system restore points (capped, newest kept), WinSxS component store (DISM), Windows upgrade leftovers (cleanmgr /autoclean), Windows Update cache (service stop/start automated) |
+| 🐳 **Docker/WSL regenerative cleanup** | `docker system prune` measured by df delta; vhdx virtual disks compacted offline via `diskpart` — reclaims blank space, never touches data |
+| 🏢 **IDEs & built-in AI** | JetBrains system caches (multi-product, multi-version), VS Code C++ ipch cache, Copilot Chat session data (read-only report), Windsurf/ZCode desktop clients |
+| 🧱 **Project artifact cleanup** | Marker files identify project roots (Node/Python/Rust/.NET/Maven/Gradle/Dart/PHP); enumerates node_modules/.venv/target/bin/obj and friends, sorted by size with 90-day staleness tiers and **regeneration commands** — the #1 pain point validated by npkill/kondo |
+| 🌍 **Portability** | System drive resolved at runtime (works even when Windows isn't on C:); Chinese and English system output plus decimal-comma locales; Conda installation auto-discovery |
 
-## 📄 许可证
+## 🧭 Design Principles
+
+1. **Unclear semantics? Don't touch it** — uncurated tool directories are reported only; nothing is deleted before its meaning is verified
+2. **Credentials and configuration are a red line** — every catalog entry carries a neverTouch whitelist (auth / credentials / config / skills are always skipped)
+3. **Sessions are user data** — always "caution" tier *and* past the age limit (30 days by default) before cleanup; conversations are never deleted silently
+4. **Official commands first** — content-addressable stores only go through official prune (`pnpm store prune` / `go clean -modcache`); no raw deletion
+5. **Preview first** — dry-run has zero side effects; command-based cleanups and service state are equally protected
+6. **Everything audited** — every scan and cleanup: per-item freed amounts, failed paths, net disk delta — all on disk for review
+
+## 🚀 Quick Start
+
+1. Grab the latest `CacheCleaner.exe` from the [**Releases page**](https://github.com/JiangSuRan/CacheCleaner/releases)
+2. Double-click to run (a UAC elevation prompt appears at startup — cleaning system directories and reboot-delete registration require administrator rights)
+3. Click **Scan** and review everything, sorted by size
+4. Unsure? Tick **Preview mode** before cleaning to see exactly what would be freed
+5. Click **Clean selected** — a popup reports the real free-space gain, with per-item results
+
+> Files that are in use are automatically registered for deletion at next reboot and honestly reported in the summary; skipped items come with their failure reasons.
+
+## 📖 Advanced Usage
+
+### Custom Rules
+
+Drop a `rules.user.json` next to the exe (portable) or in `%LOCALAPPDATA%\CacheCleaner\` (installed) to add or override rules declaratively — **no recompiling**:
+
+```json
+[
+  {
+    "name": "MyApp cache",
+    "base": "localAppData",
+    "path": "MyApp\\Cache",
+    "desc": "MyApp playback cache; rebuilt automatically after cleaning",
+    "risk": "safe",
+    "guardProcesses": ["MyApp"]
+  },
+  {
+    "name": "Some service logs",
+    "base": "windows",
+    "path": "Logs\\MyService",
+    "desc": "Only *.log older than 30 days",
+    "risk": "warn",
+    "clean": "files",
+    "filesPatterns": ["*.log"],
+    "minAgeDays": 30,
+    "recursive": true
+  },
+  {
+    "name": "Go module cache",
+    "base": "userProfile",
+    "path": "go\\pkg\\mod",
+    "desc": "Official command cleanup; freed amount measured by directory delta",
+    "risk": "safe",
+    "clean": "command",
+    "command": "go clean -modcache",
+    "commandTimeoutMs": 600000
+  }
+]
+```
+
+Field reference: `base` (`localAppData` / `appData` / `userProfile` / `windows` / `programData` / `driveRoot`) · `risk` (`safe` / `warn` / `danger`) · `kind` (`path` / `file` / `special`) · `clean` (`directory` / `files` / `command` / `reportOnly`) · `filesPatterns` · `minAgeDays` · `recursive` · `skipSize` · `guardProcesses` · `command` + `commandTimeoutMs` (the official cleanup command and its timeout when `clean: "command"`).
+
+### Growth Baseline Monitoring
+
+A read-only growth-baseline script ships with the repo; run it periodically for an increment ranking of key locations:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
+```
+
+### Audit Logs
+
+Every scan and cleanup is logged to `%LOCALAPPDATA%\CacheCleaner\logs\clean-date.log`: item sizes, per-item freed amounts, the exact occupied/unauthorized paths, and the before/after free-space delta — "the cleanup didn't help" is now a question with evidence.
+
+## 🤖 Agent Catalog
+
+The full list lives in [docs/agent-catalog.md](docs/agent-catalog.md). Curation standards:
+
+- An entry becomes cleanable only with **official documentation or source-level evidence**; agents with unverified semantics land in the "uncatalogued report" instead
+- Every entry declares a `detect` signature (marker files), a `neverTouch` whitelist, a `confidence` tier and a `verified` date
+- Layout-drift protection: entries hide automatically when their directories are absent; users can hot-fix with `rules.user.json`
+
+Issues contributing evidence for new agents (with official docs or source links) are welcome — verified entries get catalogued.
+
+## 🏗️ Engineering Quality
+
+- 🧪 **Regression suite** — [`tests/Regression`](tests/Regression/) with zero framework dependencies: parallel pipes under heavy output, timeout, cancellation, preview deleting nothing, real deletion, recent-file retention, continue-on-failure, leftover-size accounting and read-only UI behavior; real deletion only targets random directories the suite creates itself
+- 📦 **Self-contained single file** — one exe embeds the .NET 10 runtime and all rule assets; copy and run
+- ✅ **Zero-warning builds** — Release builds with 0 errors / 0 warnings
+- ♿ **Accessibility** — fully custom-drawn buttons keep the PushButton role, screen-reader names and Tab/Space/Enter operation
+- 🖼️ **Unified UI** — borderless window, three-tier button hierarchy with a dynamic primary button, thin rounded progress bar; verified on a real machine at 100% scaling
+
+## 🛠️ Tech Stack & Build
+
+- C# / .NET 10 WinForms, zero external dependencies, self-contained single-file publish
+- Optional Inno Setup installer
+
+```bash
+# Build (target: zero warnings)
+dotnet build -c Release
+
+# Publish self-contained single file
+dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
+
+# Cleanup regression tests (real deletion only targets the suite's own random directories)
+dotnet run --project tests/Regression/Regression.csproj -c Release
+
+# Real-window checks (creates sample rows; saves no user settings, runs no cleanup)
+dotnet run --project tests/Regression/Regression.csproj -c Release -- --ui
+
+# Build installer (requires Inno Setup)
+ISCC setup.iss
+```
+
+## 📸 Screenshots · 截图
+
+| Main window 主界面 | Scan results 扫描完成（sorted by size · risk labels · per-item results） |
+|---|---|
+| ![Main](docs/screenshots/main.png) | ![Scan](docs/screenshots/scan.png) |
+
+## 📄 License · 许可证
 
 MIT
