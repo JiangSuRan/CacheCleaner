@@ -332,7 +332,10 @@ public class MainForm : Form
         };
         var colPath = new DataGridViewTextBoxColumn { Name = "Path", HeaderText = "路径", Visible = false, ReadOnly = true };
 
-        dgv.Columns.AddRange([colCheck, colName, colSize, colDesc, colRisk, colPath]);
+        var colResult = new DataGridViewTextBoxColumn { Name = "Result", HeaderText = "处理结果", Width = 112, ReadOnly = true,
+            SortMode = DataGridViewColumnSortMode.NotSortable };
+        colRisk.HeaderText = "风险";
+        dgv.Columns.AddRange([colCheck, colName, colSize, colDesc, colRisk, colResult, colPath]);
         dgv.CellContentClick += Dgv_CellContentClick;
         dgv.CellFormatting += Dgv_CellFormatting;
         dgv.CellPainting += Dgv_CellPainting;
@@ -510,6 +513,7 @@ public class MainForm : Form
         btnSelectNone.Enabled = enabled && dgv.Rows.Count > 0;
         btnTrend.Enabled = enabled;
         chkPreview.Enabled = enabled;
+        dgv.Enabled = enabled;
         btnCancel.Enabled = !enabled;   // 取消常驻：仅扫描/清理期间可点
     }
 
@@ -629,6 +633,7 @@ public class MainForm : Form
     /// </summary>
     private async void BtnScan_Click(object? sender, EventArgs e)
     {
+        if (_cts != null) return;
         SetControlsEnabled(false);
         SetState(UiState.Scanning, "扫描中", "");
         progress.Indeterminate = true;
@@ -694,10 +699,11 @@ public class MainForm : Form
 
             long reclaimable = 0;
             for (int i = 0; i < dgv.Rows.Count; i++)
-                reclaimable += dgv.Rows[i].Cells["Size"].Value as long? ?? 0;
+                if (dgv.Rows[i].Tag is CacheItem item && CacheScanner.CanClean(item))
+                    reclaimable += dgv.Rows[i].Cells["Size"].Value as long? ?? 0;
 
             SetState(UiState.ScanCompleted, "扫描完成", $"发现 {dgv.Rows.Count} 个缓存项");
-            lblReclaim.Text = $"可释放 {CacheScanner.FormatSize(reclaimable)}";
+            lblReclaim.Text = $"可处理占用 {CacheScanner.FormatSize(reclaimable)}";
             lblFound.Text = $"已发现 {dgv.Rows.Count} 项";
             lblCount.Text = "";
             progress.Visible = false;
@@ -741,8 +747,11 @@ public class MainForm : Form
             item.SizeBytes,
             item.Desc,
             item.Risk,
+            CacheScanner.CanClean(item) ? "待处理" : "只读报告",
             item.Path
         );
+        dgv.Rows[rowIdx].Tag = item;
+        if (!CacheScanner.CanClean(item)) dgv.Rows[rowIdx].Cells["Checked"].ReadOnly = true;
 
         // 自动发现项文字降一档（信息权重：已知规则优先）
         if (!isKnown)
@@ -755,7 +764,7 @@ public class MainForm : Form
             bool check = AppSettings.HasCheckedSnapshot
                 ? AppSettings.CheckedNames.Contains(item.Name)
                 : item.Risk == RiskLevel.Safe;
-            dgv.Rows[rowIdx].Cells["Checked"].Value = check;
+            dgv.Rows[rowIdx].Cells["Checked"].Value = check && CacheScanner.CanClean(item);
         }
     }
 
@@ -764,15 +773,17 @@ public class MainForm : Form
     /// </summary>
     private async void BtnClean_Click(object? sender, EventArgs e)
     {
+        if (_cts != null) return;
+        dgv.EndEdit();
         // 收集选中项
         var selectedItems = new List<(int rowIndex, string name, string path, RiskLevel risk)>();
         for (int i = 0; i < dgv.Rows.Count; i++)
         {
-            if (dgv.Rows[i].Cells["Checked"].Value is true)
+            if (dgv.Rows[i].Cells["Checked"].Value is true && dgv.Rows[i].Tag is CacheItem source && CacheScanner.CanClean(source))
             {
                 selectedItems.Add((
                     i,
-                    dgv.Rows[i].Cells["Name"].Value?.ToString() ?? "",
+                    source.Name,
                     dgv.Rows[i].Cells["Path"].Value?.ToString() ?? "",
                     dgv.Rows[i].Cells["Risk"].Value is RiskLevel r ? r : RiskLevel.Safe
                 ));
@@ -835,7 +846,10 @@ public class MainForm : Form
         LayoutStatusArea(_statusArea);
 
         _cts = new CancellationTokenSource();
-        var progress2 = new Progress<string>(msg => lblStateDetail.Text = msg);
+        var progress2 = new Progress<string>(msg =>
+        {
+            if (_state == UiState.Cleaning && !IsDisposed) lblStateDetail.Text = msg;
+        });
         var total = new CleanResult();
 
         try
@@ -846,14 +860,30 @@ public class MainForm : Form
                 var (rowIdx, name, path, _) = selectedItems[i];
 
                 lblStateDetail.Text = name;
-                progress.Value = i + 1;
-                lblCount.Text = $"{i + 1} / {selectedItems.Count}";
+                progress.Value = i;
+                progress.Indeterminate = true;
+                lblCount.Text = $"{i} / {selectedItems.Count}";
+                LayoutStatusArea(_statusArea);
+                dgv.Rows[rowIdx].Cells["Result"].Value = dryRun ? "预览中" : "处理中";
                 dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(0xFD, 0xF3, 0xDC);
 
-                var item = new CacheItem { Name = name, Path = path, Exists = true };
+                var item = (CacheItem)dgv.Rows[rowIdx].Tag!;
+                CleanLog.LogItemStart(name, path);
                 var itemResult = await Task.Run(() => CacheScanner.CleanItem(item, progress2, _cts.Token));
                 total += itemResult;
                 CleanLog.LogCleanItem(name, path, itemResult);
+                progress.Indeterminate = false;
+                progress.Value = i + 1;
+                lblCount.Text = $"{i + 1} / {selectedItems.Count}";
+                dgv.Rows[rowIdx].Cells["Result"].Value = dryRun ? "预览完成"
+                    : itemResult.SkippedCount > 0 ? "已跳过"
+                    : itemResult.TotalFailures > 0 ? "部分失败"
+                    : itemResult.PendingRebootCount > 0 ? "等待重启"
+                    : item.SizeBytes > 0 ? "仍有保留项" : "已完成";
+                dgv.Rows[rowIdx].Cells["Result"].ToolTipText = itemResult.Detail
+                    ?? $"占用 {itemResult.LockedCount}，权限 {itemResult.PermissionDeniedCount}，失败 {itemResult.OtherFailureCount}，待重启 {itemResult.PendingRebootCount}；详见审计日志";
+                if (!dryRun) dgv.Rows[rowIdx].Cells["Size"].Value = item.SizeBytes;
+                UpdateSelected();
 
                 // 预览：仅高亮不改大小；FreedBytes>0 表示释放了空间；DeletedCount>0 覆盖命令式项
                 if (dryRun)
@@ -862,7 +892,6 @@ public class MainForm : Form
                 }
                 else if (itemResult.FreedBytes > 0 || itemResult.DeletedCount > 0)
                 {
-                    dgv.Rows[rowIdx].Cells["Size"].Value = item.SizeBytes;
                     dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(0xE4, 0xF5, 0xEC);
                 }
                 else
@@ -873,9 +902,10 @@ public class MainForm : Form
 
             string freedStr = CacheScanner.FormatSize(total.FreedBytes);
             long freeAfter = CacheScanner.GetCFreeBytes();
-            string statusDetail = total.TotalFailures > 0 ? $"（跳过 {total.TotalFailures} 个）" : "";
+            string statusDetail = total.TotalFailures > 0 ? $"（失败 {total.TotalFailures} 个）" : "";
+            if (total.PendingRebootCount > 0) statusDetail += $"（待重启 {total.PendingRebootCount} 个）";
             SetState(dryRun ? UiState.ScanCompleted : UiState.CleanCompleted,
-                dryRun ? "预览完成" : "清理完成",
+                dryRun ? "预览完成" : total.TotalFailures + total.PendingRebootCount + total.SkippedCount > 0 ? "清理结束（有未完成项）" : "清理完成",
                 dryRun ? $"将释放 {freedStr}（未实际删除）" : $"释放 {freedStr}{statusDetail} · 磁盘净增 {CacheScanner.FormatSize(Math.Max(0, freeAfter - freeBefore))}");
             progress.Visible = false;
             lblCount.Text = "";
@@ -889,9 +919,19 @@ public class MainForm : Form
             );
 
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            SetState(UiState.Cancelled, "已取消清理", "");
+            if (ex is CleaningCancelledException partial)
+            {
+                total += partial.Partial;
+                foreach (DataGridViewRow row in dgv.Rows)
+                    if (row.Cells["Result"].Value is "处理中" or "预览中" && row.Tag is CacheItem item)
+                    {
+                        if (!dryRun) row.Cells["Size"].Value = item.SizeBytes;
+                        CleanLog.LogCleanItem(item.Name, item.Path, partial.Partial);
+                    }
+            }
+            SetState(UiState.Cancelled, "已取消清理", ex.Message.Contains("后台") ? ex.Message : "已停止后续项目");
             progress.Visible = false;
             lblCount.Text = "";
         }
@@ -903,6 +943,11 @@ public class MainForm : Form
         }
         finally
         {
+            CleanLog.LogCleanSummary(total, freeBefore, CacheScanner.GetCFreeBytes());
+            progress.Visible = false;
+            progress.Indeterminate = false;
+            foreach (DataGridViewRow row in dgv.Rows)
+                if (row.Cells["Result"].Value is "处理中" or "预览中") row.Cells["Result"].Value = "已中断";
             CacheScanner.DryRun = false;
             SetControlsEnabled(true);
             _cts?.Dispose();
@@ -925,6 +970,7 @@ public class MainForm : Form
         if (total.PermissionDeniedCount > 0) detailParts.Add($"{total.PermissionDeniedCount} 个权限不足");
         if (total.OtherFailureCount > 0) detailParts.Add($"{total.OtherFailureCount} 个其它失败");
         if (total.PendingRebootCount > 0) detailParts.Add($"{total.PendingRebootCount} 个将于重启时删除");
+        if (total.SkippedCount > 0) detailParts.Add($"{total.SkippedCount} 项已跳过");
 
         if (detailParts.Count > 0)
         {
@@ -951,12 +997,17 @@ public class MainForm : Form
     private void UpdateSelected()
     {
         long total = 0;
+        long remaining = 0;
         for (int i = 0; i < dgv.Rows.Count; i++)
         {
             if (dgv.Rows[i].Cells["Checked"].Value is true)
                 total += dgv.Rows[i].Cells["Size"].Value as long? ?? 0;
+            if (dgv.Rows[i].Tag is CacheItem item && CacheScanner.CanClean(item))
+                remaining += dgv.Rows[i].Cells["Size"].Value as long? ?? 0;
         }
         lblSelected.Text = $"已选择 {CacheScanner.FormatSize(total)}";
+        if (_state is UiState.Cleaning or UiState.CleanCompleted or UiState.Cancelled)
+            lblReclaim.Text = $"剩余占用 {CacheScanner.FormatSize(remaining)}";
         LayoutStatusArea(_statusArea);
     }
 
@@ -966,7 +1017,7 @@ public class MainForm : Form
         try
         {
             for (int i = 0; i < dgv.Rows.Count; i++)
-                dgv.Rows[i].Cells["Checked"].Value = check;
+                dgv.Rows[i].Cells["Checked"].Value = check && dgv.Rows[i].Tag is CacheItem item && CacheScanner.CanClean(item);
         }
         finally
         {

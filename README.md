@@ -2,15 +2,21 @@
 
 # 🧹 CacheCleaner
 
-**AI 时代开发者的磁盘治理工具 —— Agent · CLI · IDE · 内置 AI · 模型仓库，一个 exe 全覆盖**
+**AI 时代开发者的磁盘治理工具**
+
+**Agent · CLI · IDE · 内置 AI · 模型仓库 · 项目工程 —— 一个 exe 全覆盖**
 
 [![Release](https://img.shields.io/github/v/release/JiangSuRan/CacheCleaner?color=blue&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/JiangSuRan/CacheCleaner/releases)
 [![.NET](https://img.shields.io/badge/.NET-10.0-blueviolet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](https://github.com/JiangSuRan/CacheCleaner/releases)
-[![Rules](https://img.shields.io/badge/%E7%94%9F%E6%95%88%E8%A7%84%E5%88%99-87%E6%9D%A1-teal)](#-核心能力)
 [![License](https://img.shields.io/badge/License-MIT-green)](#-许可证)
 
-*自包含单文件 · 免安装 · 零依赖 · 数据安全优先*
+[![Rules](https://img.shields.io/badge/%E7%94%9F%E6%95%88%E8%A7%84%E5%88%99-87%E6%9D%A1-teal)](#-核心能力)
+[![Agents](https://img.shields.io/badge/Agent%E6%94%B6%E5%BD%95-18%E4%B8%AA-blue)](#-agent-收录目录)
+[![Artifacts](https://img.shields.io/badge/%E5%8F%AF%E5%86%8D%E7%94%9F%E4%BA%A7%E7%89%A9-26%E9%A1%B9-orange)](#-核心能力)
+[![Tests](https://img.shields.io/badge/%E5%9B%9E%E5%BD%92%E6%B5%8B%E8%AF%95-15%E9%A1%B9%E9%80%9A%E8%BF%87-success)](tests/Regression/)
+
+*自包含单文件 · 免安装 · 零依赖 · 数据安全优先 · 全程可审计*
 
 </div>
 
@@ -18,9 +24,9 @@
 
 ## ✨ 为什么需要它
 
-AI agent 与 CLI 的普及，让开发者磁盘出现了一代全新的膨胀源：**会话转录**只进不出、**模型权重**动辄数十 GB、**自更新**堆积旧版本、**内容寻址存储**设计上只增不减、再加上每个工具都在家目录圈一块 dot-home。社区已经大量报障（`~/.claude` 涨到 3.6 GB 的 issue、Cursor "清缓存"误删 300 GB 的事故），而传统清理工具不理解这些语义。
+AI agent 与 CLI 的普及，让开发者的磁盘出现了一代传统清理工具完全不认识的新膨胀源：**会话转录**只进不出、**模型权重**动辄数十 GB、**自更新**堆积旧版本、**内容寻址存储**设计上只增不减，每个工具还要在家目录圈一块 dot-home。社区已经大量报障——`~/.claude` 涨到 3.6 GB 的 issue、Cursor「清缓存」误删 300 GB 的事故——一个不懂语义的清理器，要么不敢删，要么删错。
 
-CacheCleaner 用一套**带安全语义的规则引擎**统一治理：87 条生效规则覆盖 Agent · CLI · IDE · 内置 AI · 模型仓库六类位置，配三级风险、进程守卫、预览模式与全程审计——并把收录做成可持续维护的**Agent 目录**。
+CacheCleaner 的答案是一套**带安全语义的规则引擎**：87 条生效规则覆盖六类位置，三级风险标注、进程守卫、预览模式、全程审计层层兜底，并把收录工作沉淀为可持续维护的 **Agent 收录目录**——**已知全自动，未知看得见**。
 
 ## 🎯 核心能力
 
@@ -30,9 +36,10 @@ CacheCleaner 用一套**带安全语义的规则引擎**统一治理：87 条生
 | 🛡️ **三级安全防护** | 安全 / 注意 / 危险三级风险标注；路径安全校验 + 系统级精确白名单；`guardProcesses` 进程守卫——浏览器、微信运行中自动跳过对应缓存项并记入日志 |
 | 👁️ **预览模式** | 只统计将释放的量，不删除任何文件、不执行任何命令、不改动服务状态——先看账单，再动手 |
 | 📊 **效果可观测** | 清理汇总以**磁盘可用空间差**为准（拒绝纸面数字）；逐项释放量与失败明细（被占用/权限不足的具体路径）落盘审计日志 |
+| ♻️ **可靠清理管线** | 命令式清理并行读取输出、限时轮询、随时可取消——系统维护进程（DISM 等）保留后台自行结束，绝不误杀；逐项「处理结果」列（成功/失败/跳过/待重启），清理后核实**真实残留大小**，单项失败不中断，任何结束方式都写入审计汇总 |
 | 📈 **增长分析** | 按「最后写入时间」找出最近 3/7/14 天新写入的大文件排行，直接回答「**谁在吃我的盘**」；命中可迁盘的大缓存时给出**迁盘顾问**命令 |
 | 🧩 **JSON 规则引擎** | 71 条默认规则内嵌 + 16 条 Agent 目录编译，放一份 `rules.user.json` 即可增改，**无需重新编译**（对标 Winapp2.ini 的思路） |
-| 🤖 **Agent 收录目录** | 18 个主流 agent 的收录清单（Claude Code / Codex / Gemini CLI / Qwen / OpenCode / Amazon Q / Goose / Crush / 通义灵码 / MarsCode），带探测签名、neverTouch 白名单、置信分级与核实日期 |
+| 🤖 **Agent 收录目录** | 18 个主流 agent 的收录清单（Claude Code / Codex / Gemini CLI / Qwen / OpenCode / Amazon Q / Goose / Crush / 通义灵码 / MarsCode 等），带探测签名、neverTouch 白名单、置信分级与核实日期 |
 | 🗺️ **未收录探测器** | 家目录下未被覆盖的大体积工具目录以「只报告不清理」列出——**已知全自动，未知看得见** |
 | 🖥️ **系统级瘦身** | 回收站、系统还原点（缩减上限保留最新）、WinSxS 组件存储（DISM）、Windows 升级残留（cleanmgr /autoclean）、Windows 更新缓存（自动停启服务） |
 | 🐳 **Docker/WSL 再生性清理** | `docker system prune` 按 df 差值计释放；vhdx 虚拟磁盘 `diskpart compact` 离线压缩——只回收空白，不碰数据 |
@@ -55,7 +62,7 @@ CacheCleaner 用一套**带安全语义的规则引擎**统一治理：87 条生
 2. 双击运行（启动时弹出 UAC 提权确认——清理系统目录与重启删除登记需要管理员权限）
 3. 点击 **「扫描缓存」**，按大小降序查看所有可清理项
 4. 不放心？勾选 **「预览模式」** 再点清理，先看将释放多少
-5. 点击 **「清理选中」**——完成后弹窗展示磁盘可用空间的真实增量
+5. 点击 **「清理选中」**——完成后展示磁盘可用空间的真实增量，逐项处理结果一目了然
 
 > 被占用的文件会自动登记为**重启删除**，并在汇总中如实告知；被跳过的项目附失败原因。
 
@@ -123,10 +130,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 
 欢迎提 issue 贡献新 agent 的布局证据（附官方文档或源码链接），按流程核实后收录。
 
+## 🏗️ 工程品质
+
+- 🧪 **回归测试套件** — [`tests/Regression`](tests/Regression/) 零框架依赖：覆盖双管道大量输出、超时与取消、预览零删除、真实删除、最近文件保留、失败后继续、残留大小计量、只读条目 UI 行为；真实删除仅作用于测试自建的随机目录，退出即清理
+- 📦 **自包含单文件** — 一个 exe 内嵌 .NET 10 运行时与全部规则资产，拷贝即用，无需安装任何依赖
+- ✅ **零警告编译** — Release 构建 0 错误 / 0 警告
+- ♿ **无障碍友好** — 全自绘按钮保留 PushButton 无障碍角色、屏幕阅读器名称与 Tab/Space/Enter 键盘操作
+- 🖼️ **一体化界面** — 无边框窗口、三档按钮层级与动态主按钮、细圆角进度条，100% 缩放下实机验证
+
 ## 🆕 版本演进
 
 | 版本 | 主题 | 亮点 |
 |---|---|---|
+| v5.1.1 | 清理流程修复 | 命令输出并行读取与可取消等待；逐项处理结果、真实残留大小、只读项排除、预览无删除、失败继续与结束审计 |
 | v5.1 | 界面一体化改版 | 无边框窗口 + 自绘标题栏 + DWM 圆角，双层头部、三档按钮层级（动态主按钮）、圆角列表面板 + 状态标签、插画渐变背景、细圆角进度条、结构化状态区；修复构造期布局崩溃与按钮重绘遮挡 |
 | v5.0 | 项目工程清理 | 产物注册表 + 项目检测扫描器 + 陈旧度分级（源自 kondo/npkill 社区调研） |
 | v4.3 | 目录扩充 | DeepSeek Harness/Zed/Cline/Copilot CLI/Amp/Droid/CodeBuddy/pi 收录（全部源码级核实） |
@@ -146,11 +162,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 - Inno Setup 打包安装程序（可选）
 
 ```bash
-# 编译
+# 编译（目标：零警告）
 dotnet build -c Release
 
 # 发布自包含单文件
 dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
+
+# 清理流程回归测试（真实删除仅作用于测试自建的随机目录）
+dotnet run --project tests/Regression/Regression.csproj -c Release
+
+# 实窗检查（创建示例行，不保存用户设置、不执行清理）
+dotnet run --project tests/Regression/Regression.csproj -c Release -- --ui
 
 # 生成安装包（需 Inno Setup）
 ISCC setup.iss
@@ -159,26 +181,29 @@ ISCC setup.iss
 ## 📁 项目结构
 
 ```
-├── CacheScanner.cs      # 扫描/清理核心（规则引擎消费端、进程守卫、命令式清理框架）
-├── CleaningRules.cs     # JSON 规则加载器（内嵌默认 + 侧车覆盖 + 目录编译）
-├── AgentCatalog.cs      # Agent 目录加载与编译器
-├── ProjectRegistry.cs   # 项目工件注册表加载
-├── rules.default.json   # 内嵌声明式规则（71 条）
-├── agents.catalog.json  # Agent 收录目录（18 个 agent / 31 条编译条目）
+├── CacheScanner.cs        # 扫描/清理核心（三阶段扫描、规则引擎消费端、进程守卫）
+├── CommandRunner.cs       # 命令式清理执行器（并行管道读取、限时轮询、取消/超时）
+├── FileCleaner.cs         # 文件删除执行器（逐目录处理、失败继续、跳过链接）
+├── CleaningRules.cs       # JSON 规则加载器（内嵌默认 + 侧车覆盖 + 目录编译）
+├── AgentCatalog.cs        # Agent 目录加载与编译器
+├── ProjectRegistry.cs     # 项目工件注册表加载
+├── rules.default.json     # 内嵌声明式规则（71 条）
+├── agents.catalog.json    # Agent 收录目录（18 个 agent / 31 条编译条目）
 ├── projects.registry.json # 项目工件注册表（8 类项目 / 26 项可再生产物）
-├── CleanLog.cs          # 清理审计日志
-├── GrowthDialog.cs      # 增长分析页（含迁盘顾问）
-├── AppSettings.cs       # 设置持久化
-├── MainForm.cs          # 主界面
-├── Theme.cs             # 界面主题系统（色彩/字体/圆角面板/自绘按钮/进度条）
-├── LICENSE              # MIT
-├── cleanup/             # 增长基线监控脚本等辅助工具
-└── docs/                # 设计演进记录 + Agent 时代调研 + 目录分析
+├── CleanLog.cs            # 清理审计日志
+├── GrowthDialog.cs        # 增长分析页（含迁盘顾问）
+├── AppSettings.cs         # 设置持久化
+├── MainForm.cs            # 主界面
+├── Theme.cs               # 界面主题系统（色彩/字体/圆角面板/自绘按钮/进度条）
+├── LICENSE                # MIT
+├── cleanup/               # 增长基线监控脚本等辅助工具
+├── tests/Regression/      # 清理流程回归测试（零框架依赖）
+└── docs/                  # 设计演进记录 + Agent 时代调研 + 目录分析
 ```
 
 ## 📸 截图
 
-| 主界面 | 扫描完成（按大小降序 · 三级风险标注） |
+| 主界面 | 扫描完成（按大小降序 · 三级风险标注 · 逐项处理结果） |
 |---|---|
 | ![主界面](docs/screenshots/main.png) | ![扫描结果](docs/screenshots/scan.png) |
 

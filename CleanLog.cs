@@ -43,6 +43,7 @@ public static class CleanLog
     /// <summary>记录清理开始与起始可用空间（预览模式时在日志中标注）</summary>
     public static void LogCleanStart(int itemCount, long freeBytesBefore, bool dryRun)
     {
+        lock (Gate) FailureNotes.Clear();
         Write(new List<string>
         {
             $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] === 清理开始：{itemCount} 项，C 盘可用 {CacheScanner.FormatSize(freeBytesBefore)}{(dryRun ? "（预览模式，未删除）" : "")} ==="
@@ -55,9 +56,14 @@ public static class CleanLog
         Write(new List<string>
         {
             $"  [{DateTime.Now:HH:mm:ss}] {name}: 释放 {CacheScanner.FormatSize(result.FreedBytes)}，删除 {result.DeletedCount}，" +
-            $"占用 {result.LockedCount}，权限 {result.PermissionDeniedCount}，其它失败 {result.OtherFailureCount}，待重启 {result.PendingRebootCount}  ({path})"
+            $"占用 {result.LockedCount}，权限 {result.PermissionDeniedCount}，其它失败 {result.OtherFailureCount}，待重启 {result.PendingRebootCount}，跳过 {result.SkippedCount} {result.Detail}  ({path})"
         });
     }
+
+    public static void LogItemStart(string name, string path) => Write(new List<string>
+    {
+        $"  [{DateTime.Now:HH:mm:ss}] 正在处理 {name} ({path})"
+    });
 
     /// <summary>记录清理汇总：总量、磁盘可用空间前后差、失败明细，并清空本轮失败缓存</summary>
     public static void LogCleanSummary(CleanResult total, long freeBefore, long freeAfter)

@@ -27,6 +27,8 @@ public readonly record struct CleanResult(
     int PendingRebootCount)     // MoveFileEx 登记重启删除成功的文件数（P1-2）
 {
     public int TotalFailures => LockedCount + PermissionDeniedCount + OtherFailureCount;
+    public int SkippedCount { get; init; }
+    public string? Detail { get; init; }
 
     public static CleanResult operator +(CleanResult a, CleanResult b) => new(
         a.FreedBytes + b.FreedBytes,
@@ -34,7 +36,7 @@ public readonly record struct CleanResult(
         a.LockedCount + b.LockedCount,
         a.PermissionDeniedCount + b.PermissionDeniedCount,
         a.OtherFailureCount + b.OtherFailureCount,
-        a.PendingRebootCount + b.PendingRebootCount);
+        a.PendingRebootCount + b.PendingRebootCount) { SkippedCount = a.SkippedCount + b.SkippedCount };
 }
 
 /// <summary>
@@ -292,6 +294,7 @@ public static class CacheScanner
                 if ((rule.Kind == "file" || rule.FilesPatterns is { Count: > 0 }) && item.Exists && item.SizeBytes == 0)
                     item.Exists = false;
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 Debug.WriteLine($"扫描 {rule.Name} 失败: {ex.Message}");
@@ -385,11 +388,9 @@ public static class CacheScanner
     {
         try
         {
-            using var proc = StartPipProcess("cache dir");
-            if (proc == null) return null;
-            string output = proc.StandardOutput.ReadToEnd().Trim();
-            proc.WaitForExit(5000);
-            if (proc.ExitCode != 0 || string.IsNullOrEmpty(output))
+            var command = RunCommandOutput("pip", "cache dir", 5000);
+            string output = command.Output.Trim();
+            if (!command.Ok || string.IsNullOrEmpty(output))
                 return null;
 
             if (!Directory.Exists(output))
@@ -400,6 +401,7 @@ public static class CacheScanner
             bool isValid = ValidPipCacheKeywords.Any(k => normalized.Contains(k));
             return isValid ? output : null;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"获取 pip 缓存路径失败: {ex.Message}");
@@ -481,6 +483,7 @@ public static class CacheScanner
             return dir.EnumerateFiles(pattern, searchOption)
                 .Sum(f => { try { return f.Length; } catch { return 0L; } });
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"计算目录大小失败 {path}: {ex.Message}");
@@ -509,6 +512,34 @@ public static class CacheScanner
     /// </summary>
     public static CleanResult CleanItem(CacheItem item, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        long originalSize = item.SizeBytes;
+        CleanResult result;
+        try { result = CleanItemCore(item, progress, cancellationToken); }
+        catch (CleaningCancelledException ex)
+        {
+            if (!DryRun) item.SizeBytes = Math.Max(0, originalSize - ex.Partial.FreedBytes);
+            throw;
+        }
+        if (!DryRun && result.SkippedCount == 0 && result.FreedBytes > 0)
+            item.SizeBytes = Math.Max(0, originalSize - result.FreedBytes);
+        if (!DryRun && result.SkippedCount == 0 && Directory.Exists(item.Path)
+            && !item.Name.StartsWith("UWP ", StringComparison.Ordinal)
+            && !item.Name.Contains("旧版本", StringComparison.Ordinal))
+        {
+            (long Bytes, bool Complete) remaining;
+            try { remaining = FileCleaner.Measure(item.Path, cancellationToken); }
+            catch (OperationCanceledException) { throw new CleaningCancelledException(result, cancellationToken); }
+            if (remaining.Complete) item.SizeBytes = remaining.Bytes;
+        }
+        return result;
+    }
+
+    public static bool CanClean(CacheItem item) => !item.Name.StartsWith("未收录工具目录", StringComparison.Ordinal)
+        && CleaningRules.Find(item.Name)?.Clean != "reportOnly";
+
+    private static CleanResult CleanItemCore(CacheItem item, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
         // 命令式清理项没有可校验的真实路径（Path 为「（命令式清理）」占位符），必须在
         // 存在性门卫之前分发，否则 File/Directory 检查永远失败，清理函数沦为死代码
         if (item.Name == "DNS 解析缓存")
@@ -518,7 +549,7 @@ public static class CacheScanner
             return ShrinkShadowStorage(item, progress);
 
         if (item.Name == "Windows 升级残留")
-            return CleanUpgradeRemnants(progress);
+            return CleanUpgradeRemnants(progress, cancellationToken);
 
         // 遗留追踪会话：停止 WPR/手动内核追踪，终止持续写盘
         if (item.Name == "遗留性能追踪会话")
@@ -526,7 +557,7 @@ public static class CacheScanner
 
         // 未收录工具目录：仅报告占用，语义确认前绝不清理
         if (item.Name.StartsWith("未收录工具目录"))
-            return default;
+            return new CleanResult { SkippedCount = 1, Detail = "只读报告，未执行清理" };
 
         // 项目工件：目录走清空，单文件走删除（注册表白名单内，可再生）
         if (item.Name.StartsWith("[项目] "))
@@ -538,7 +569,7 @@ public static class CacheScanner
 
         // Docker/WSL：prune 与 vhdx 压缩均为官方再生性操作，取代旧的整删危险项
         if (item.Name == "Docker 未使用数据")
-            return CleanDockerPrune(progress);
+            return CleanDockerPrune(progress, cancellationToken);
 
         if (item.Name == "WSL/Docker 虚拟磁盘")
             return CleanWslVhdx(progress, cancellationToken);
@@ -560,13 +591,13 @@ public static class CacheScanner
             {
                 progress?.Report($"跳过 {item.Name}（{string.Join("、", running)} 正在运行）");
                 CleanLog.NoteFailure($"进程运行中跳过 [{string.Join("、", running)}]: {item.Path}");
-                return default;
+                return new CleanResult { SkippedCount = 1, Detail = $"正在运行：{string.Join("、", running)}" };
             }
         }
 
         // 规则声明只读报告（如 VS 安装缓存）：绝不清理
         if (rule?.Clean == "reportOnly")
-            return default;
+            return new CleanResult { SkippedCount = 1, Detail = "只读报告，未执行清理" };
 
         // 存在性门卫：目录或单文件（如 C:\Windows\Memory.dmp）均放行
         if (!item.Exists || string.IsNullOrEmpty(item.Path) ||
@@ -577,7 +608,7 @@ public static class CacheScanner
         if (!IsPathSafeForCleaning(item.Path))
         {
             Debug.WriteLine($"路径安全校验失败，跳过清理: {item.Path}");
-            return default;
+            return new CleanResult { SkippedCount = 1, Detail = "路径未通过安全校验" };
         }
 
         // 规则声明的文件模式清理（thumbcache_*/iconcache_*、CbsPersist_* 等）
@@ -587,8 +618,8 @@ public static class CacheScanner
             foreach (var pattern in rule.FilesPatterns)
             {
                 patternTotal += rule.MinAgeDays > 0
-                    ? CleanOldFiles(item.Path, pattern, rule.MinAgeDays, rule.Recursive)
-                    : CleanFiles(item.Path, pattern, rule.Recursive);
+                    ? CleanOldFiles(item.Path, pattern, rule.MinAgeDays, rule.Recursive, cancellationToken)
+                    : CleanFiles(item.Path, pattern, rule.Recursive, cancellationToken);
             }
 
             if (patternTotal.FreedBytes > 0 && !DryRun)
@@ -612,7 +643,7 @@ public static class CacheScanner
             long before = Directory.Exists(item.Path) ? SumFiles(item.Path) : 0;
             progress?.Report($"正在执行 {rule.Command} ...");
             // 经 cmd /c 解析：pnpm/conda 等在 Windows 上是 .cmd 垫片而非 exe
-            var (ok, output) = RunCommandOutput("cmd", $"/d /s /c \"{rule.Command}\"", rule.CommandTimeoutMs);
+            var (ok, output) = RunCommandOutput("cmd", $"/d /s /c \"{rule.Command}\"", rule.CommandTimeoutMs, cancellationToken, progress);
             if (!ok)
             {
                 CleanLog.NoteFailure($"命令清理失败 [{rule.Command}]: {output.Trim()}");
@@ -631,7 +662,7 @@ public static class CacheScanner
 
         CleanResult result = item.Name switch
         {
-            "pip 缓存" => CleanPipCache(item, progress),
+            "pip 缓存" => CleanPipCache(item, progress, cancellationToken),
             "Windows 临时文件" => CleanTempFiles(item.Path, cancellationToken),
             "系统临时文件" => CleanTempFiles(item.Path, cancellationToken),
             "系统内存转储" => CleanSingleFile(item.Path),
@@ -640,7 +671,7 @@ public static class CacheScanner
             "Windows 更新下载缓存" => CleanWindowsUpdateCache(item.Path, cancellationToken),
             "Delivery Optimization 缓存" => CleanDeliveryOptimizationCache(item),
             "Windows 组件存储 (WinSxS)" => RunComponentCleanup(item, progress, cancellationToken),
-            _ => CleanDirectory(item.Path, cancellationToken),
+            _ => CleanDirectory(item.Path, cancellationToken, progress),
         };
 
         // 预览模式不改写条目状态，保持列表原样供用户核对
@@ -717,7 +748,7 @@ public static class CacheScanner
     /// <summary>
     /// 清理 pip 缓存
     /// </summary>
-    private static CleanResult CleanPipCache(CacheItem item, IProgress<string>? progress)
+    private static CleanResult CleanPipCache(CacheItem item, IProgress<string>? progress, CancellationToken cancellationToken)
     {
         long sizeBefore = item.SizeBytes;
         if (DryRun)
@@ -728,9 +759,10 @@ public static class CacheScanner
         try
         {
             progress?.Report("正在执行 pip cache purge...");
-            using var proc = StartPipProcess("cache purge");
-            proc?.WaitForExit(10000);
+            var command = RunCommandOutput("pip", "cache purge", 10000, cancellationToken, progress);
+            if (!command.Ok) return new CleanResult(0, 0, 0, 0, 1, 0) { Detail = command.Output };
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"pip cache purge 失败: {ex.Message}");
@@ -743,116 +775,14 @@ public static class CacheScanner
     /// <summary>
     /// 清理临时文件（仅删除超过7天的）
     /// </summary>
-    private static CleanResult CleanTempFiles(string path, CancellationToken cancellationToken)
-    {
-        if (!Directory.Exists(path)) return default;
-        long freed = 0;
-        int deleted = 0, locked = 0, denied = 0, other = 0, pendingReboot = 0;
-        var cutoff = DateTime.Now.AddDays(-7);
-
-        try
-        {
-            var dir = new DirectoryInfo(path);
-            foreach (var file in dir.EnumerateFiles("*", SearchOption.AllDirectories))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (file.LastWriteTime >= cutoff) continue;
-                try
-                {
-                    long len = file.Length;
-                    if (DryRun)
-                    {
-                        // 预览模式：不删除，仅统计将释放的量
-                        freed += len;
-                        deleted++;
-                        continue;
-                    }
-                    file.Delete();
-                    // 删除成功才计入释放量：登记重启删除的文件尚未真正释放，不能虚报
-                    freed += len;
-                    deleted++;
-                }
-                catch (IOException)
-                {
-                    // 文件被占用：先尝试登记为重启删除（需管理员），成功计为待重启，否则计为占用失败
-                    if (ScheduleDeleteOnReboot(file.FullName)) pendingReboot++;
-                    else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); CleanLog.NoteFailure($"被占用: {file.FullName}"); }
-                }
-                catch (UnauthorizedAccessException) { denied++; Debug.WriteLine($"权限不足，跳过 {file.FullName}"); CleanLog.NoteFailure($"权限不足: {file.FullName}"); }
-                catch (Exception ex) { other++; Debug.WriteLine($"删除临时文件失败 {file.FullName}: {ex.Message}"); CleanLog.NoteFailure($"其它失败: {file.FullName}"); }
-            }
-
-            // 从深到浅清理空目录
-            foreach (var subDir in dir.EnumerateDirectories("*", SearchOption.AllDirectories)
-                .OrderByDescending(d => d.FullName.Length))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
-                {
-                    if (!subDir.EnumerateFileSystemInfos().Any())
-                        subDir.Delete();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"删除空目录失败 {subDir.FullName}: {ex.Message}");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"清理临时文件失败: {ex.Message}");
-        }
-
-        return new CleanResult(freed, deleted, locked, denied, other, pendingReboot);
-    }
+    private static CleanResult CleanTempFiles(string path, CancellationToken cancellationToken) =>
+        FileCleaner.Clean(path, "*", true, DateTime.Now.AddDays(-7), true, cancellationToken);
 
     /// <summary>
     /// 删除匹配的文件并累计释放字节数（统一替代重复的删除循环）
     /// </summary>
-    private static CleanResult CleanFiles(string path, string pattern, bool recursive = false)
-    {
-        if (!Directory.Exists(path)) return default;
-        long freed = 0;
-        int deleted = 0, locked = 0, denied = 0, other = 0, pendingReboot = 0;
-
-        try
-        {
-            var dir = new DirectoryInfo(path);
-            foreach (var file in dir.EnumerateFiles(pattern,
-                recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))
-            {
-                try
-                {
-                    long len = file.Length;
-                    if (DryRun)
-                    {
-                        // 预览模式：不删除，仅统计将释放的量
-                        freed += len;
-                        deleted++;
-                        continue;
-                    }
-                    file.Delete();
-                    // 删除成功才计入释放量：登记重启删除的文件尚未真正释放，不能虚报
-                    freed += len;
-                    deleted++;
-                }
-                catch (IOException)
-                {
-                    // 文件被占用：先尝试登记为重启删除（需管理员），成功计为待重启，否则计为占用失败
-                    if (ScheduleDeleteOnReboot(file.FullName)) pendingReboot++;
-                    else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); CleanLog.NoteFailure($"被占用: {file.FullName}"); }
-                }
-                catch (UnauthorizedAccessException) { denied++; Debug.WriteLine($"权限不足，跳过 {file.FullName}"); CleanLog.NoteFailure($"权限不足: {file.FullName}"); }
-                catch (Exception ex) { other++; Debug.WriteLine($"删除文件失败 {file.FullName}: {ex.Message}"); CleanLog.NoteFailure($"其它失败: {file.FullName}"); }
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"清理 {path} 失败: {ex.Message}");
-        }
-
-        return new CleanResult(freed, deleted, locked, denied, other, pendingReboot);
-    }
+    private static CleanResult CleanFiles(string path, string pattern, bool recursive = false, CancellationToken cancellationToken = default) =>
+        FileCleaner.Clean(path, pattern, recursive, null, false, cancellationToken);
 
     /// <summary>
     /// 删除单个文件（如 C:\Windows\Memory.dmp），返回清理结果
@@ -878,6 +808,7 @@ public static class CacheScanner
             return new CleanResult(0, 0, 1, 0, 0, 0);
         }
         catch (UnauthorizedAccessException) { Debug.WriteLine($"权限不足，跳过 {filePath}"); return new CleanResult(0, 0, 0, 1, 0, 0); }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Debug.WriteLine($"删除文件失败 {filePath}: {ex.Message}"); return new CleanResult(0, 0, 0, 0, 1, 0); }
     }
 
@@ -885,67 +816,8 @@ public static class CacheScanner
     /// 清理整个目录内容，保留目录本身
     /// 单次遍历累计释放字节数（替代原来的三次目录扫描）
     /// </summary>
-    private static CleanResult CleanDirectory(string path, CancellationToken cancellationToken)
-    {
-        if (!Directory.Exists(path)) return default;
-        long freed = 0;
-        int deleted = 0, locked = 0, denied = 0, other = 0, pendingReboot = 0;
-
-        try
-        {
-            var dir = new DirectoryInfo(path);
-
-            // 删除文件并累计释放空间
-            foreach (var file in dir.EnumerateFiles("*", SearchOption.AllDirectories))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
-                {
-                    long len = file.Length;
-                    if (DryRun)
-                    {
-                        // 预览模式：不删除，仅统计将释放的量
-                        freed += len;
-                        deleted++;
-                        continue;
-                    }
-                    file.Delete();
-                    // 删除成功才计入释放量：登记重启删除的文件尚未真正释放，不能虚报
-                    freed += len;
-                    deleted++;
-                }
-                catch (IOException)
-                {
-                    // 文件被占用：先尝试登记为重启删除（需管理员），成功计为待重启，否则计为占用失败
-                    if (ScheduleDeleteOnReboot(file.FullName)) pendingReboot++;
-                    else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); CleanLog.NoteFailure($"被占用: {file.FullName}"); }
-                }
-                catch (UnauthorizedAccessException) { denied++; Debug.WriteLine($"权限不足，跳过 {file.FullName}"); CleanLog.NoteFailure($"权限不足: {file.FullName}"); }
-                catch (Exception ex) { other++; Debug.WriteLine($"删除文件失败 {file.FullName}: {ex.Message}"); CleanLog.NoteFailure($"其它失败: {file.FullName}"); }
-            }
-
-            // 从深到浅删除子目录
-            foreach (var subDir in dir.EnumerateDirectories("*", SearchOption.AllDirectories)
-                .OrderByDescending(d => d.FullName.Length))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
-                {
-                    subDir.Delete(true);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"删除目录失败 {subDir.FullName}: {ex.Message}");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"清理目录失败 {path}: {ex.Message}");
-        }
-
-        return new CleanResult(freed, deleted, locked, denied, other, pendingReboot);
-    }
+    private static CleanResult CleanDirectory(string path, CancellationToken cancellationToken, IProgress<string>? progress = null) =>
+        FileCleaner.Clean(path, "*", true, null, true, cancellationToken, progress);
 
     /// <summary>
     /// 扫描 Electron 应用更新缓存（*-updater 目录）
@@ -984,6 +856,7 @@ public static class CacheScanner
                 });
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"扫描更新缓存失败: {ex.Message}");
@@ -1030,6 +903,7 @@ public static class CacheScanner
                 SizeBytes = totalSize
             });
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"扫描 GitHub Desktop 旧版本失败: {ex.Message}");
@@ -1041,33 +915,7 @@ public static class CacheScanner
     /// </summary>
     private static CleanResult CleanGithubDesktopOldVersions(string path, CancellationToken cancellationToken)
     {
-        try
-        {
-            var versions = Directory.GetDirectories(path, "app-*")
-                .OrderByDescending(d => d)
-                .ToList();
-
-            if (versions.Count <= 1) return default;
-
-            long freed = 0;
-            int deleted = 0, other = 0;
-            for (int i = 1; i < versions.Count; i++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                long size = SumFiles(versions[i]);
-                if (DryRun)
-                {
-                    // 预览模式：不删除，仅统计将释放的量
-                    freed += size;
-                    deleted++;
-                    continue;
-                }
-                try { Directory.Delete(versions[i], true); freed += size; deleted++; }
-                catch (Exception ex) { other++; Debug.WriteLine($"删除旧版本失败 {versions[i]}: {ex.Message}"); }
-            }
-            return new CleanResult(freed, deleted, 0, 0, other, 0);
-        }
-        catch { return default; }
+        return CleanVersionDirectories(Directory.GetDirectories(path, "app-*").OrderByDescending(d => d).ToList(), cancellationToken);
     }
 
     /// <summary>
@@ -1115,6 +963,7 @@ public static class CacheScanner
                 });
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"扫描微信缓存失败: {ex.Message}");
@@ -1210,6 +1059,7 @@ public static class CacheScanner
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"扫描 Adobe 恢复快照失败: {ex.Message}");
@@ -1254,6 +1104,7 @@ public static class CacheScanner
                         progress, ref current, ref total, cancellationToken);
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 Debug.WriteLine($"扫描 {label} 多 Profile 缓存失败: {ex.Message}");
@@ -1297,6 +1148,7 @@ public static class CacheScanner
                     progress, ref current, ref total, cancellationToken);
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"扫描豆包缓存失败: {ex.Message}");
@@ -1343,6 +1195,7 @@ public static class CacheScanner
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"扫描 {label} 缓存子目录失败: {ex.Message}");
@@ -1457,6 +1310,7 @@ public static class CacheScanner
                     });
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 Debug.WriteLine($"扫描 Firefox 缓存失败: {ex.Message}");
@@ -1515,6 +1369,7 @@ public static class CacheScanner
                     });
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 Debug.WriteLine($"扫描 UWP 缓存族失败: {ex.Message}");
@@ -1546,6 +1401,7 @@ public static class CacheScanner
                     if (Directory.Exists(target)) total += CleanDirectory(target, cancellationToken);
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 Debug.WriteLine($"清理 UWP 缓存族失败: {ex.Message}");
@@ -1582,6 +1438,7 @@ public static class CacheScanner
                         progress, ref current, ref total);
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 Debug.WriteLine($"扫描 Codex 运行时旧版本失败: {ex.Message}");
@@ -1625,6 +1482,7 @@ public static class CacheScanner
                     SizeBytes = oldSize
                 });
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 Debug.WriteLine($"扫描旧版本目录失败 {dirPath}: {ex.Message}");
@@ -1637,105 +1495,40 @@ public static class CacheScanner
         private static CleanResult CleanKeepNewest(string dirPath, CancellationToken cancellationToken)
         {
             if (!Directory.Exists(dirPath)) return default;
+            return CleanVersionDirectories(new DirectoryInfo(dirPath).GetDirectories()
+                .OrderByDescending(d => d.LastWriteTime).Select(d => d.FullName).ToList(), cancellationToken);
+        }
 
-            long freed = 0;
-            int deleted = 0, other = 0;
-            try
+    private static CleanResult CleanVersionDirectories(IReadOnlyList<string> versions, CancellationToken cancellationToken)
+    {
+        CleanResult total = default;
+        try
+        {
+            // 沿用扫描端的版本排序，只处理第一个目录之外的旧版本。
+            foreach (var version in versions.Skip(1))
             {
-                var versions = new DirectoryInfo(dirPath).GetDirectories()
-                    .OrderByDescending(d => d.LastWriteTime)
-                    .ToList();
-                for (int i = 1; i < versions.Count; i++)
+                cancellationToken.ThrowIfCancellationRequested();
+                if ((File.GetAttributes(version) & FileAttributes.ReparsePoint) != 0)
+                { CleanLog.NoteFailure($"保留版本目录链接: {version}"); continue; }
+                total += FileCleaner.Clean(version, "*", true, null, true, cancellationToken);
+                if (!DryRun)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    long size = SumFiles(versions[i].FullName);
-                    if (DryRun)
-                    {
-                        // 预览模式：不删除，仅统计将释放的量
-                        freed += size;
-                        deleted++;
-                        continue;
-                    }
-                    try
-                    {
-                        versions[i].Delete(true);
-                        // 删除成功才计入释放量
-                        freed += size;
-                        deleted++;
-                    }
-                    catch (Exception ex)
-                    {
-                        other++;
-                        Debug.WriteLine($"删除旧版本失败 {versions[i].FullName}: {ex.Message}");
-                        CleanLog.NoteFailure($"其它失败: {versions[i].FullName}");
-                    }
+                    try { Directory.Delete(version, false); }
+                    catch (IOException) { /* 保留被占用或尚未清空的版本目录。 */ }
+                    catch (UnauthorizedAccessException ex) { CleanLog.NoteFailure($"无法移除版本目录 {version}: {ex.Message}"); }
                 }
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"清理旧版本失败 {dirPath}: {ex.Message}");
-            }
-            return new CleanResult(freed, deleted, 0, 0, other, 0);
         }
+        catch (CleaningCancelledException ex) { throw new CleaningCancelledException(total + ex.Partial, cancellationToken); }
+        catch (OperationCanceledException) { throw new CleaningCancelledException(total, cancellationToken); }
+        return total;
+    }
 
         /// <summary>
         /// 删除匹配且超过 ageDays 天的文件（如 CBS 的 CbsPersist_*，绝不能碰正在写入的 CBS.log）
         /// </summary>
-        private static CleanResult CleanOldFiles(string path, string pattern, int ageDays, bool recursive = false)
-        {
-            if (!Directory.Exists(path)) return default;
-
-            long freed = 0;
-            int deleted = 0, locked = 0, denied = 0, other = 0, pendingReboot = 0;
-            var cutoff = DateTime.Now.AddDays(-ageDays);
-
-            try
-            {
-                foreach (var file in new DirectoryInfo(path).EnumerateFiles(pattern,
-                    recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))
-                {
-                    if (file.LastWriteTime >= cutoff) continue;
-                    try
-                    {
-                        long len = file.Length;
-                        if (DryRun)
-                        {
-                            // 预览模式：不删除，仅统计将释放的量
-                            freed += len;
-                            deleted++;
-                            continue;
-                        }
-                        file.Delete();
-                        // 删除成功才计入释放量
-                        freed += len;
-                        deleted++;
-                    }
-                    catch (IOException)
-                    {
-                        if (ScheduleDeleteOnReboot(file.FullName)) pendingReboot++;
-                        else { locked++; Debug.WriteLine($"文件被占用，跳过 {file.FullName}"); CleanLog.NoteFailure($"被占用: {file.FullName}"); }
-                    }
-                    catch (UnauthorizedAccessException)
-                    {
-                        denied++;
-                        Debug.WriteLine($"权限不足，跳过 {file.FullName}");
-                        CleanLog.NoteFailure($"权限不足: {file.FullName}");
-                    }
-                    catch (Exception ex)
-                    {
-                        other++;
-                        Debug.WriteLine($"删除过期文件失败 {file.FullName}: {ex.Message}");
-                        CleanLog.NoteFailure($"其它失败: {file.FullName}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"清理过期文件失败 {path}: {ex.Message}");
-            }
-
-            return new CleanResult(freed, deleted, locked, denied, other, pendingReboot);
-        }
+        private static CleanResult CleanOldFiles(string path, string pattern, int ageDays, bool recursive = false, CancellationToken cancellationToken = default) =>
+        FileCleaner.Clean(path, pattern, recursive, DateTime.Now.AddDays(-ageDays), false, cancellationToken);
 
         /// <summary>
         /// Windows 更新下载缓存：停 wuauserv/bits → 清理 → 起服务。
@@ -1780,7 +1573,7 @@ public static class CacheScanner
         /// Windows 升级残留（Windows.old/$GetCurrent/ESD）：走官方 cleanmgr /autoclean。
         /// 执行后无法回滚到旧版本，该风险由清理确认弹窗的「注意」分类提示。
         /// </summary>
-        private static CleanResult CleanUpgradeRemnants(IProgress<string>? progress)
+        private static CleanResult CleanUpgradeRemnants(IProgress<string>? progress, CancellationToken cancellationToken)
         {
         if (DryRun)
         {
@@ -1788,7 +1581,7 @@ public static class CacheScanner
             return new CleanResult(0, 1, 0, 0, 0, 0);
         }
         progress?.Report("正在执行 cleanmgr /autoclean（系统磁盘清理，可能需要数分钟）...");
-        bool ok = RunCommand("cleanmgr", "/autoclean", 3_600_000);
+        bool ok = RunCommand("cleanmgr", "/autoclean", 3_600_000, cancellationToken, progress);
             return new CleanResult(0, ok ? 1 : 0, 0, 0, ok ? 0 : 1, 0);
         }
 
@@ -1800,20 +1593,9 @@ public static class CacheScanner
     {
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "vssadmin",
-                Arguments = $"list shadowstorage /for={SysDriveLetter}:",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var proc = Process.Start(psi);
-            if (proc == null) return (0, false);
-            string output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(15000);
-            if (proc.ExitCode != 0) return (0, false);
+            var command = RunCommandOutput("vssadmin", $"list shadowstorage /for={SysDriveLetter}:", 15000);
+            if (!command.Ok) return (0, false);
+            string output = command.Output;
 
             // 数值兼容小数逗号 locale（如 de-DE 输出 5,2 GB）：统一替换逗号后按不变文化解析
             var match = Regex.Match(output, @"(\d+(?:[.,]\d+)?)\s*(KB|MB|GB|TB)", RegexOptions.IgnoreCase);
@@ -1830,6 +1612,7 @@ public static class CacheScanner
             };
             return (bytes, true);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"查询卷影副本占用失败: {ex.Message}");
@@ -1855,6 +1638,7 @@ public static class CacheScanner
                 total += CleanDirectory(sidDir, cancellationToken);
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"清空回收站失败: {ex.Message}");
@@ -1896,7 +1680,7 @@ public static class CacheScanner
         progress?.Report("正在执行 DISM 组件清理（15-30 分钟，请耐心等待）...");
         cancellationToken.ThrowIfCancellationRequested();
         // 超时上限 2 小时：老机器首次组件清理可能远超 30 分钟，被超时误判为失败会误导用户
-        bool ok = RunCommand("Dism.exe", "/Online /Cleanup-Image /StartComponentCleanup", 7_200_000);
+        bool ok = RunCommand("Dism.exe", "/Online /Cleanup-Image /StartComponentCleanup", 7_200_000, cancellationToken, progress);
         if (ok) item.SizeBytes = 0;
         return new CleanResult(0, ok ? 1 : 0, 0, 0, ok ? 0 : 1, 0);
     }
@@ -1932,6 +1716,7 @@ public static class CacheScanner
                 scanRoots.Add(userDir);
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"枚举用户目录失败: {ex.Message}");
@@ -1972,6 +1757,7 @@ public static class CacheScanner
             subDirs = Directory.GetDirectories(path);
         }
         catch (UnauthorizedAccessException) { return; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"无法访问目录 {path}: {ex.Message}");
@@ -2149,32 +1935,9 @@ public static class CacheScanner
     /// <summary>
     /// 执行命令并捕获标准输出（如 logman query -ets）。
     /// </summary>
-    private static (bool Ok, string Output) RunCommandOutput(string fileName, string arguments, int timeoutMs = 15_000)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            using var proc = Process.Start(psi);
-            if (proc == null) return (false, "");
-            string output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(timeoutMs);
-            if (!proc.HasExited) return (false, output);
-            return (proc.ExitCode == 0, output);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"执行命令失败 {fileName} {arguments}: {ex.Message}");
-            return (false, "");
-        }
-    }
+    private static (bool Ok, string Output) RunCommandOutput(string fileName, string arguments, int timeoutMs = 15_000,
+        CancellationToken cancellationToken = default, IProgress<string>? progress = null) =>
+        CommandRunner.Run(fileName, arguments, timeoutMs, cancellationToken, progress);
 
     /// <summary>
     /// 检测遗留的性能追踪会话（WPR 录制未停止、手动启动的内核追踪）。
@@ -2346,6 +2109,7 @@ public static class CacheScanner
             {
                 files.AddRange(new DirectoryInfo(root).EnumerateFiles("*.vhdx", options));
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 Debug.WriteLine($"枚举 vhdx 失败 {root}: {ex.Message}");
@@ -2382,7 +2146,7 @@ public static class CacheScanner
     /// <summary>
     /// Docker 未使用数据清理：以 prune 前后 docker system df 差值计释放量
     /// </summary>
-    private static CleanResult CleanDockerPrune(IProgress<string>? progress)
+    private static CleanResult CleanDockerPrune(IProgress<string>? progress, CancellationToken cancellationToken)
     {
         if (DryRun)
         {
@@ -2390,14 +2154,14 @@ public static class CacheScanner
             return new CleanResult(0, 1, 0, 0, 0, 0);
         }
 
-        var (_, beforeDf) = RunCommandOutput("docker", "system df", 20_000);
+        var (_, beforeDf) = RunCommandOutput("docker", "system df", 20_000, cancellationToken);
         long beforeBytes = ParseDockerReclaimable(beforeDf);
 
         progress?.Report("正在执行 docker system prune -a --volumes（可能需要数分钟）...");
-        bool ok = RunCommand("docker", "system prune -a --volumes -f", 1_800_000);
+        bool ok = RunCommand("docker", "system prune -a --volumes -f", 1_800_000, cancellationToken, progress);
         if (!ok) return new CleanResult(0, 0, 0, 0, 1, 0);
 
-        var (_, afterDf) = RunCommandOutput("docker", "system df", 20_000);
+        var (_, afterDf) = RunCommandOutput("docker", "system df", 20_000, cancellationToken);
         long afterBytes = ParseDockerReclaimable(afterDf);
         return new CleanResult(Math.Max(0, beforeBytes - afterBytes), 1, 0, 0, 0, 0);
     }
@@ -2428,7 +2192,7 @@ public static class CacheScanner
         }
 
         progress?.Report("正在关闭 WSL（Docker Desktop 的 WSL 后端随之停止）...");
-        RunCommand("wsl", "--shutdown", 30_000);
+        RunCommand("wsl", "--shutdown", 30_000, cancellationToken, progress);
 
         long before = SizeSum();
         var scriptPath = Path.Combine(Path.GetTempPath(), $"cachecleaner-compact-{Guid.NewGuid():N}.txt");
@@ -2441,9 +2205,10 @@ public static class CacheScanner
                 {
                     File.WriteAllText(scriptPath,
                         $"select vdisk file=\"{file.FullName}\"\r\nattach vdisk readonly\r\ncompact vdisk\r\ndetach vdisk\r\n");
-                    if (!RunCommand("diskpart", $"/s \"{scriptPath}\"", 1_800_000))
+                    if (!RunCommand("diskpart", $"/s \"{scriptPath}\"", 1_800_000, cancellationToken, progress))
                         CleanLog.NoteFailure($"vhdx 压缩失败: {file.FullName}");
                 }
+                catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
                     CleanLog.NoteFailure($"vhdx 压缩失败 {file.FullName}: {ex.Message}");
@@ -2649,37 +2414,12 @@ public static class CacheScanner
     /// <summary>
     /// 通用命令执行（如 ipconfig /flushdns），返回是否成功退出
     /// </summary>
-    private static bool RunCommand(string fileName, string arguments, int timeoutMs = 8000)
+    private static bool RunCommand(string fileName, string arguments, int timeoutMs = 8000,
+        CancellationToken cancellationToken = default, IProgress<string>? progress = null)
     {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            using var proc = Process.Start(psi);
-            if (proc == null) return false;
-
-            // WaitForExit(timeout) 返回 false = 超时未退出，此时读 ExitCode 会抛
-            // InvalidOperationException；进程仍在后台运行，如实报失败，绝不能误杀
-            // 长任务（DISM 组件清理是小时级操作，中途终止会损坏组件存储）
-            if (!proc.WaitForExit(timeoutMs))
-            {
-                Debug.WriteLine($"命令超时未退出（仍在后台运行）: {fileName} {arguments}");
-                return false;
-            }
-            return proc.ExitCode == 0;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"执行命令失败 {fileName} {arguments}: {ex.Message}");
-            return false;
-        }
+        var result = CommandRunner.Run(fileName, arguments, timeoutMs, cancellationToken, progress);
+        if (!result.Ok) CleanLog.NoteFailure($"命令失败 {fileName} {arguments}: {result.Output}");
+        return result.Ok;
     }
 
     /// <summary>
@@ -2693,30 +2433,6 @@ public static class CacheScanner
         return new CleanResult(0, ok ? 1 : 0, 0, 0, ok ? 0 : 1, 0);
     }
 
-    /// <summary>
-    /// 创建 pip 进程（统一入口，避免重复 ProcessStartInfo 配置）
-    /// </summary>
-    private static Process? StartPipProcess(string arguments)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "pip",
-                Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            return Process.Start(psi);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"启动 pip 命令失败: {ex.Message}");
-            return null;
-        }
-    }
 
     /// <summary>
     /// JetBrains 全家桶：%LOCALAPPDATA%\JetBrains\&lt;Product&gt;&lt;版本&gt;\ 为系统/缓存目录
@@ -2766,6 +2482,7 @@ public static class CacheScanner
                 });
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"扫描 JetBrains 缓存失败: {ex.Message}");
@@ -2788,6 +2505,7 @@ public static class CacheScanner
                 catch { }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"进程检测失败: {ex.Message}");
@@ -2831,6 +2549,7 @@ public static class CacheScanner
                     running.Add(display);
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"检测运行中进程失败: {ex.Message}");
@@ -2851,12 +2570,13 @@ public static class CacheScanner
     /// <summary>
     /// 尝试登记文件重启删除；成功返回 true，失败（如非管理员/路径不支持）返回 false
     /// </summary>
-    private static bool ScheduleDeleteOnReboot(string filePath)
+    internal static bool ScheduleDeleteOnReboot(string filePath)
     {
         try
         {
             return MoveFileEx(filePath, null, MOVEFILE_DELAY_UNTIL_REBOOT);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Debug.WriteLine($"登记重启删除失败 {filePath}: {ex.Message}");
