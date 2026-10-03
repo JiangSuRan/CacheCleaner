@@ -1,54 +1,72 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Drawing.Imaging;
-using System.Reflection;
+using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 
 namespace CacheCleaner;
 
+/// <summary>
+/// 主界面（v5.1 一体化改版）：无边框圆角窗口 + 四层视觉体系。
+/// L0 底色 #F5F8FD / L1 整窗插画（cover、center-right、白纱 0.44）/ L2 半透明白色内容面板 /
+/// L3 控件。标题栏自绘（图标 + C盘缓存清理 + 最小化/关闭，可拖动），按钮按
+/// Primary/Secondary/Ghost 层级动态分配主按钮。固定尺寸窗口 → 绝对布局。
+/// 业务逻辑与皮肤完全解耦。
+/// </summary>
 public class MainForm : Form
 {
-    // 主题背景图片
-    private static readonly Image? ThemeBg = LoadThemeImage();
+    // ---- 状态机 ----
+    private UiState _state = UiState.Idle;
 
-    private static Image? LoadThemeImage()
-    {
-        var stream = Assembly.GetExecutingAssembly()
-            .GetManifestResourceStream("CacheCleaner.theme_bg.png");
-        return stream != null ? Image.FromStream(stream) : null;
-    }
+    // ---- 面板 ----
+    private SoftPanel _titleBar = null!;
+    private SoftPanel _headerTitle = null!;
+    private SoftPanel _headerToolbar = null!;
+    private SoftPanel _statusArea = null!;
+    private SoftPanel contentPanel = null!;
 
-    // 缓存的字体对象（避免 CellFormatting 中反复创建导致 GDI 泄漏）
-    private static readonly Font FontTitle = new("微软雅黑", 16, FontStyle.Bold);
-    private static readonly Font FontNormal = new("微软雅黑", 9.5F);
-    private static readonly Font FontNormalBold = new("微软雅黑", 9.5F, FontStyle.Bold);
-    private static readonly Font FontSmall = new("微软雅黑", 9F);
-    private static readonly Font FontSmallBold = new("微软雅黑", 9F, FontStyle.Bold);
+    // ---- 标题栏控件 ----
+    private Label lblBarTitle = null!;
+    private CaptionButton btnMin = null!;
+    private CaptionButton btnClose = null!;
 
-    // 常用颜色常量
-    private static readonly Color AccentBlue = Color.FromArgb(0, 120, 215);
-    private static readonly Color DangerRed = Color.FromArgb(220, 53, 69);
-    private static readonly Color SuccessGreen = Color.FromArgb(40, 167, 69);
-    private static readonly Color WarnYellow = Color.FromArgb(255, 193, 7);
-    private static readonly Color GrayButton = Color.FromArgb(108, 117, 125);
+    // ---- 头部控件 ----
+    private Label lblTitle = null!;
+    private Label lblSubTitle = null!;
 
+    // ---- 操作按钮 ----
+    private GradientButton btnScan = null!;
+    private GradientButton btnClean = null!;
+    private GradientButton btnSelectAll = null!;
+    private GradientButton btnSelectNone = null!;
+    private GradientButton btnCancel = null!;
+    private GradientButton btnTrend = null!;
+
+    // ---- 内容区控件 ----
     private AnimeDataGridView dgv = null!;
-    private Button btnScan = null!;
-    private Button btnClean = null!;
-    private Button btnSelectAll = null!;
-    private Button btnSelectNone = null!;
-    private Button btnCancel = null!;
-    private Button btnGrowth = null!;
+    private Label lblSection = null!;
+    private Label lblFound = null!;
+    private Label lblEmpty = null!;
+
+    // ---- 状态区控件 ----
+    private Label lblStateDot = null!;
+    private Label lblCount = null!;
+    private Label lblStateTitle = null!;
+    private Label lblStateDetail = null!;
+    private Label lblReclaim = null!;
+    private Label lblSelected = null!;
     private CheckBox chkPreview = null!;
-    private ProgressBar progressBar = null!;
-    private Label lblStatus = null!;
-    private Label lblTotal = null!;
+
+    // ---- 进度条 ----
+    private ProgressLite progress = null!;
+
     private CancellationTokenSource? _cts;
-    private float _bgOpacity = 0.30f;
+    private int _hoverRow = -1;
 
     public MainForm()
     {
         SetupForm();
         SetupControls();
+        LayoutUI();
 
         // 设置持久化：恢复预览开关；关闭窗口时保存当前勾选
         AppSettings.Load();
@@ -63,175 +81,181 @@ public class MainForm : Form
         };
     }
 
-    protected override void OnPaintBackground(PaintEventArgs e)
+    // ==================== 无边框窗口：拖动 / 圆角 / 边框 ====================
+
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    private const int WM_NCLBUTTONDOWN = 0xA1;
+    private const int HTCAPTION = 0x2;
+
+    /// <summary>标题栏按下拖动窗口（标准 HTCAPTION 手法）</summary>
+    private void TitleBar_MouseDown(object? sender, MouseEventArgs e)
     {
-        DrawThemeBackground(e.Graphics, ClientRectangle);
+        if (e.Button == MouseButtons.Left)
+        {
+            ReleaseCapture();
+            SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, IntPtr.Zero);
+        }
     }
 
-    /// <summary>
-    /// 绘制主题背景（窗体和 AnimeDataGridView 共用）
-    /// </summary>
-    private void DrawThemeBackground(Graphics g, Rectangle bounds)
+    protected override void OnResize(EventArgs e)
     {
-        // 半透明淡蓝底色
-        using var baseBrush = new SolidBrush(Color.FromArgb(220, 230, 240, 250));
-        g.FillRectangle(baseBrush, bounds);
-
-        if (ThemeBg == null) return;
-
-        using var attrs = new ImageAttributes();
-        attrs.SetColorMatrix(new ColorMatrix { Matrix33 = _bgOpacity });
-        g.DrawImage(ThemeBg,
-            new Rectangle(0, 0, bounds.Width, bounds.Height),
-            0, 0, ThemeBg.Width, ThemeBg.Height,
-            GraphicsUnit.Pixel, attrs);
+        base.OnResize(e);
+        LayoutUI();
     }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        // DWM 系统圆角（不对窗口做 Region 裁剪 → 无黑角）；旧系统静默忽略
+        try
+        {
+            int round = 2;   // DWMWCP_ROUND
+            DwmSetWindowAttribute(Handle, 33, ref round, sizeof(int));
+        }
+        catch { /* 旧系统 */ }
+    }
+
+    // ==================== 布局常量 ====================
+
+    private const int BarH = 40;        // 自绘标题栏
+    private const int TitleH = 58;      // 头部标题层
+    private const int ToolbarH = 46;    // 操作栏
+    private const int StatusH = 46;     // 状态区
+    private const int ProgressH = 5;    // 进度条
+
+    // ==================== 控件构建 ====================
 
     private void SetupForm()
     {
-        Text = "C盘缓存清理工具 v5.0";
-        Size = new Size(820, 600);
+        Text = "Cache Cleaner";
+        FormBorderStyle = FormBorderStyle.None;   // 自绘标题栏（窗体不可缩放，无拖拽缩放风险）
+        Size = new Size(980, 700);
         StartPosition = FormStartPosition.CenterScreen;
-        FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
-        MinimumSize = new Size(820, 600);
-        BackColor = Color.FromArgb(230, 240, 250);
+        BackColor = Theme.PageBg;
+        DoubleBuffered = true;
     }
 
     private void SetupControls()
     {
-        // 标题栏
-        var titlePanel = new Panel
+        // ---- 自绘标题栏（40px，与背景连成一体）----
+        _titleBar = new SoftPanel { VeilAlpha = 0 };
+        _titleBar.MouseDown += TitleBar_MouseDown;
+
+        lblBarTitle = new Label
         {
-            Dock = DockStyle.Top,
-            Height = 60,
-            BackColor = Color.FromArgb(15, 90, 180)
-        };
-        var titleLabel = new Label
-        {
-            Text = "  ✦ Cache Cleaner — 缓存清理 ✦",
-            ForeColor = Color.White,
-            Font = FontTitle,
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-
-        if (ThemeBg != null)
-        {
-            var avatar = new PictureBox
-            {
-                Image = ThemeBg,
-                SizeMode = PictureBoxSizeMode.Zoom,
-                Width = 48,
-                Height = 48,
-                Dock = DockStyle.Right,
-                BackColor = Color.Transparent
-            };
-            titlePanel.Controls.Add(avatar);
-        }
-        titlePanel.Controls.Add(titleLabel);
-        Controls.Add(titlePanel);
-
-        // 操作按钮区域
-        var buttonPanel = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 50,
-            Padding = new Padding(15, 10, 15, 5),
-            BackColor = Color.FromArgb(180, 230, 240, 250)
-        };
-
-        btnScan = CreateButton("🔍 扫描缓存", AccentBlue, Color.White);
-        btnScan.Location = new Point(15, 10);
-        btnScan.Size = new Size(130, 35);
-        btnScan.Click += BtnScan_Click;
-
-        btnClean = CreateButton("🧹 清理选中", DangerRed, Color.White);
-        btnClean.Location = new Point(160, 10);
-        btnClean.Size = new Size(130, 35);
-        btnClean.Enabled = false;
-        btnClean.Click += BtnClean_Click;
-
-        btnSelectAll = CreateButton("☑ 全选", GrayButton, Color.White);
-        btnSelectAll.Location = new Point(305, 10);
-        btnSelectAll.Size = new Size(80, 35);
-        btnSelectAll.Enabled = false;
-        btnSelectAll.Click += (_, _) => SetAllChecked(true);
-
-        btnSelectNone = CreateButton("☐ 取消全选", GrayButton, Color.White);
-        btnSelectNone.Location = new Point(400, 10);
-        btnSelectNone.Size = new Size(100, 35);
-        btnSelectNone.Enabled = false;
-        btnSelectNone.Click += (_, _) => SetAllChecked(false);
-
-        btnCancel = CreateButton("✖ 取消", Color.FromArgb(183, 28, 28), Color.White);
-        btnCancel.Location = new Point(515, 10);
-        btnCancel.Size = new Size(85, 35);
-        btnCancel.Visible = false;
-        btnCancel.Click += (_, _) => _cts?.Cancel();
-
-        // 增长分析：独立于扫描/清理流程，始终可用
-        btnGrowth = CreateButton("📈 增长分析", Color.FromArgb(23, 162, 184), Color.White);
-        btnGrowth.Location = new Point(615, 10);
-        btnGrowth.Size = new Size(115, 35);
-        btnGrowth.Click += (_, _) => new GrowthDialog().ShowDialog(this);
-
-        buttonPanel.Controls.AddRange([btnScan, btnClean, btnSelectAll, btnSelectNone, btnCancel, btnGrowth]);
-        Controls.Add(buttonPanel);
-
-        // 进度条
-        progressBar = new ProgressBar
-        {
-            Dock = DockStyle.Bottom,
-            Height = 8,
-            Style = ProgressBarStyle.Continuous,
-            Visible = false
-        };
-        Controls.Add(progressBar);
-
-        // 状态栏
-        var statusPanel = new Panel
-        {
-            Dock = DockStyle.Bottom,
-            Height = 35,
-            BackColor = Color.FromArgb(200, 230, 240, 250)
-        };
-        lblStatus = new Label
-        {
-            Text = "  就绪。点击「🔍 扫描缓存」开始。",
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Font = FontSmall,
+            Text = "◇  C盘缓存清理",
+            Font = new Font(Theme.FontFamily, 11.5F, FontStyle.Bold),
+            ForeColor = Theme.TextMain,
+            AutoSize = true,
             BackColor = Color.Transparent
         };
-        lblTotal = new Label
+        _titleBar.Controls.Add(lblBarTitle);
+
+        btnMin = new CaptionButton('\uE921', CaptionKind.Minimize);
+        btnClose = new CaptionButton('\uE8BB', CaptionKind.Close);
+        _titleBar.Controls.Add(btnMin);
+        _titleBar.Controls.Add(btnClose);
+        Controls.Add(_titleBar);
+
+        // ---- 头部第一层（58px）：产品名 ----
+        _headerTitle = new SoftPanel { VeilAlpha = 0 };
+
+        lblTitle = new Label
+        {
+            Text = "C盘缓存清理",
+            Font = new Font(Theme.FontFamily, 19F, FontStyle.Bold),
+            ForeColor = Theme.TextMain,
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+        lblSubTitle = new Label
+        {
+            Text = "Cache Cleaner",
+            Font = Theme.SubTitleFont,
+            ForeColor = Theme.TextSub,
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+        _headerTitle.Controls.Add(lblTitle);
+        _headerTitle.Controls.Add(lblSubTitle);
+        Controls.Add(_headerTitle);
+
+        // ---- 头部第二层（46px）：操作栏 ----
+        _headerToolbar = new SoftPanel { VeilAlpha = 0 };
+
+        btnScan = MakeButton("扫描缓存", '\uE721', ButtonStyle.Primary);
+        btnClean = MakeButton("清理选中", '\uE74D', ButtonStyle.Secondary);
+        btnSelectAll = MakeButton("全选", '\uE73A', ButtonStyle.Ghost);
+        btnSelectNone = MakeButton("取消选择", '\uE739', ButtonStyle.Ghost);
+        btnCancel = MakeButton("取消扫描", '\uE711', ButtonStyle.Ghost);
+        btnTrend = MakeButton("趋势分析", '\uE9D2', ButtonStyle.Secondary);
+
+        btnScan.Click += BtnScan_Click;
+        btnClean.Click += BtnClean_Click;
+        btnSelectAll.Click += (_, _) => SetAllChecked(true);
+        btnSelectNone.Click += (_, _) => SetAllChecked(false);
+        btnCancel.Click += (_, _) => _cts?.Cancel();
+        btnTrend.Click += (_, _) => new GrowthDialog().ShowDialog(this);
+
+        foreach (var b in new[] { btnScan, btnClean, btnSelectAll, btnSelectNone, btnCancel, btnTrend })
+        {
+            FitButton(b);
+            if (b.Width < 88) b.Width = 88;   // 短文案按钮保底宽度，避免拥挤
+        }
+
+        _headerToolbar.Controls.AddRange([btnScan, btnClean, btnSelectAll, btnSelectNone, btnCancel, btnTrend]);
+        Controls.Add(_headerToolbar);
+
+        // ---- 主内容区：圆角 12 浅色面板（扫描结果 + 空状态）----
+        contentPanel = new SoftPanel { VeilAlpha = _state.VeilAlpha() };
+
+        lblSection = new Label
+        {
+            Text = "扫描结果",
+            Font = Theme.SectionFont,
+            ForeColor = Theme.TextMain,
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+        lblFound = new Label
         {
             Text = "",
-            Dock = DockStyle.Right,
-            TextAlign = ContentAlignment.MiddleRight,
-            Font = FontSmallBold,
-            Size = new Size(200, 35),
+            Font = Theme.SmallFont,
+            ForeColor = Theme.TextSub,
+            AutoSize = true,
             BackColor = Color.Transparent
         };
-        // 预览模式开关（持久化）；加入顺序使其先于 Right/Fill 布局（WinForms 逆序停靠）
-        chkPreview = new CheckBox
+        lblEmpty = new Label
         {
-            Text = "预览模式（不删除）",
-            Dock = DockStyle.Left,
-            Width = 132,
-            Font = FontSmall,
-            BackColor = Color.Transparent
+            Text = "还没有扫描缓存\n点击扫描，看看 C 盘藏了什么",
+            Font = new Font(Theme.FontFamily, 13F),
+            ForeColor = Theme.TextSub,
+            TextAlign = ContentAlignment.MiddleCenter,
+            BackColor = Color.Transparent,
+            Visible = true
         };
-        statusPanel.Controls.AddRange([lblStatus, lblTotal, chkPreview]);
-        Controls.Add(statusPanel);
+        contentPanel.Controls.Add(lblFound);
+        contentPanel.Controls.Add(lblSection);
+        contentPanel.Controls.Add(lblEmpty);
 
-        // 数据表格（使用自定义透明 DataGridView）
+        var listPanel = new RoundedContainer { Dock = DockStyle.Fill, Padding = new Padding(1) };
+        contentPanel.Controls.Add(listPanel);
+        Controls.Add(contentPanel);
+
+        // ---- 数据表格（沿用组件，重做观感）----
         dgv = new AnimeDataGridView(this)
         {
             Dock = DockStyle.Fill,
-            BackgroundColor = Color.FromArgb(235, 240, 250),
+            BackgroundColor = Color.White,
             BorderStyle = BorderStyle.None,
             CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
+            GridColor = Color.FromArgb(0xE8, 0xEE, 0xF6),
             EnableHeadersVisualStyles = false,
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
@@ -240,108 +264,264 @@ public class MainForm : Form
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             ReadOnly = false,
             MultiSelect = false,
-            ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single,
-            GridColor = Color.FromArgb(200, 215, 240),
-            Font = FontNormal
+            ShowCellToolTips = true,
+            Font = new Font(Theme.FontFamily, 12F),
+            ColumnHeadersDefaultCellStyle =
+            {
+                BackColor = Color.FromArgb(0xF2, 0xF6, 0xFB),
+                ForeColor = Theme.TextMain,
+                Font = new Font(Theme.FontFamily, 12F, FontStyle.Bold),
+                Alignment = DataGridViewContentAlignment.MiddleLeft,
+                SelectionBackColor = Color.FromArgb(0xF2, 0xF6, 0xFB),
+                SelectionForeColor = Theme.TextMain
+            },
+            ColumnHeadersHeight = 34,
+            ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
+            DefaultCellStyle =
+            {
+                BackColor = Color.White,
+                ForeColor = Theme.TextMain,
+                SelectionBackColor = Color.FromArgb(0xEA, 0xF2, 0xFF),
+                SelectionForeColor = Theme.TextMain,
+                Padding = new Padding(Theme.SpaceS, 0, Theme.SpaceS, 0),
+                WrapMode = DataGridViewTriState.False
+            },
+            AlternatingRowsDefaultCellStyle =
+            {
+                BackColor = Color.FromArgb(0xFA, 0xFC, 0xFF),
+                ForeColor = Theme.TextMain,
+                SelectionBackColor = Color.FromArgb(0xEA, 0xF2, 0xFF),
+                SelectionForeColor = Theme.TextMain,
+                Padding = new Padding(Theme.SpaceS, 0, Theme.SpaceS, 0),
+                WrapMode = DataGridViewTriState.False
+            },
+            RowTemplate = { Height = 38 }
         };
 
-        dgv.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(220, 230, 245);
-        dgv.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(40, 40, 80);
-        dgv.ColumnHeadersDefaultCellStyle.Font = FontNormalBold;
-        dgv.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        dgv.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(200, 215, 240);
-        dgv.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.FromArgb(40, 40, 80);
-        dgv.ColumnHeadersHeight = 36;
-        dgv.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-
-        dgv.DefaultCellStyle.BackColor = Color.FromArgb(240, 245, 255);
-        dgv.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(230, 238, 252);
-        dgv.RowTemplate.Height = 32;
-
-        // 列定义
         var colCheck = new DataGridViewCheckBoxColumn
         {
-            Name = "Checked",
-            HeaderText = "",
-            Width = 45,
-            TrueValue = true,
-            FalseValue = false,
-            IndeterminateValue = false
+            Name = "Checked", HeaderText = "", Width = 44,
+            TrueValue = true, FalseValue = false, IndeterminateValue = false
         };
-
         var colName = new DataGridViewTextBoxColumn
         {
-            Name = "Name",
-            HeaderText = "缓存项目",
-            Width = 160,
-            ReadOnly = true
+            Name = "Name", HeaderText = "缓存项目", ReadOnly = true,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 56,
+            SortMode = DataGridViewColumnSortMode.Automatic
         };
-
         var colSize = new DataGridViewTextBoxColumn
         {
-            Name = "Size",
-            HeaderText = "大小",
-            Width = 100,
-            ReadOnly = true,
+            Name = "Size", HeaderText = "大小", Width = 104, ReadOnly = true,
             DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight }
         };
-
         var colDesc = new DataGridViewTextBoxColumn
         {
-            Name = "Desc",
-            HeaderText = "说明",
-            Width = 300,
-            ReadOnly = true
+            Name = "Desc", HeaderText = "说明", ReadOnly = true,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 44,
+            SortMode = DataGridViewColumnSortMode.NotSortable
         };
-
         var colRisk = new DataGridViewTextBoxColumn
         {
-            Name = "Risk",
-            HeaderText = "风险",
-            Width = 60,
-            ReadOnly = true,
-            DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter }
+            Name = "Risk", HeaderText = "状态", Width = 68, ReadOnly = true,
+            DefaultCellStyle = new DataGridViewCellStyle
+            {
+                Alignment = DataGridViewContentAlignment.MiddleCenter,
+                ForeColor = Theme.TextMain
+            }
         };
-
-        var colPath = new DataGridViewTextBoxColumn
-        {
-            Name = "Path",
-            HeaderText = "路径",
-            Visible = false,
-            ReadOnly = true
-        };
+        var colPath = new DataGridViewTextBoxColumn { Name = "Path", HeaderText = "路径", Visible = false, ReadOnly = true };
 
         dgv.Columns.AddRange([colCheck, colName, colSize, colDesc, colRisk, colPath]);
         dgv.CellContentClick += Dgv_CellContentClick;
         dgv.CellFormatting += Dgv_CellFormatting;
+        dgv.CellPainting += Dgv_CellPainting;
+        dgv.CellMouseEnter += Dgv_CellMouseEnter;
+        dgv.CellMouseLeave += Dgv_CellMouseLeave;
+        listPanel.Controls.Add(dgv);
 
-        Controls.Add(dgv);
-        Controls.SetChildIndex(dgv, 0);
-    }
+        // ---- 底部状态区（46px）----
+        _statusArea = new SoftPanel { VeilAlpha = 0, ShowTopLine = true };
 
-    private Button CreateButton(string text, Color backColor, Color foreColor)
-    {
-        return new Button
+        lblStateDot = new Label
         {
-            Text = text,
-            BackColor = backColor,
-            ForeColor = foreColor,
-            FlatStyle = FlatStyle.Flat,
-            Font = FontNormal,
-            Cursor = Cursors.Hand,
-            TextAlign = ContentAlignment.MiddleCenter
+            Text = "●",
+            Font = new Font(Theme.FontFamily, 9F),
+            ForeColor = Theme.TextSub,
+            AutoSize = true,
+            BackColor = Color.Transparent
         };
+        lblStateTitle = new Label
+        {
+            Text = "就绪",
+            Font = new Font(Theme.FontFamily, 12F, FontStyle.Bold),
+            ForeColor = Theme.TextMain,
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+        lblStateDetail = new Label
+        {
+            Text = "",
+            Font = Theme.SmallFont,
+            ForeColor = Theme.TextSub,
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+        lblReclaim = new Label
+        {
+            Text = "",
+            Font = Theme.BodyFont,
+            ForeColor = Theme.TextMain,
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+        lblSelected = new Label
+        {
+            Text = "已选择 0 B",
+            Font = Theme.SmallFont,
+            ForeColor = Theme.TextSub,
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+        chkPreview = new CheckBox
+        {
+            Text = "预览模式",
+            Font = Theme.SmallFont,
+            ForeColor = Theme.TextSub,
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+        chkPreview.CheckedChanged += (_, _) => AppSettings.PreviewMode = chkPreview.Checked;
+
+        _statusArea.Controls.Add(lblStateDot);
+        _statusArea.Controls.Add(lblStateTitle);
+        _statusArea.Controls.Add(lblStateDetail);
+        _statusArea.Controls.Add(lblReclaim);
+        _statusArea.Controls.Add(lblSelected);
+        _statusArea.Controls.Add(chkPreview);
+        Controls.Add(_statusArea);
+
+        // ---- 细进度条（仅扫描/清理期间出现）----
+        progress = new ProgressLite { Visible = false };
+        Controls.Add(progress);
     }
 
-    /// <summary>
-    /// 统一设置操作按钮的启用状态
-    /// </summary>
+    private static GradientButton MakeButton(string text, char icon, ButtonStyle style)
+    {
+        return new GradientButton { Text = text, IconGlyph = icon, Style = style, Size = new Size(112, 36) };
+    }
+
+    /// <summary>按钮宽度按内容自适应（图标 16 + 间距 7 + 文字 + 左右内边距 15×2）</summary>
+    private static void FitButton(GradientButton b)
+    {
+        var iconW = b.IconGlyph != default ? TextRenderer.MeasureText(b.IconGlyph.ToString(), Theme.IconFont).Width + 7 : 0;
+        var textW = TextRenderer.MeasureText(b.Text, b.Font).Width;
+        b.Width = iconW + textW + 34;
+    }
+
+    // ==================== 绝对布局（固定尺寸窗口）====================
+
+    private void LayoutUI()
+    {
+        // OnResize 会在构造期间（控件尚未创建）触发，守卫避免 NRE
+        if (ReferenceEquals(btnScan, null) || ReferenceEquals(_titleBar, null)
+            || ReferenceEquals(contentPanel, null) || ReferenceEquals(lblFound, null)) return;
+        var w = ClientSize.Width;
+        var h = ClientSize.Height;
+        if (w < 100 || h < 100) return;
+
+        int y = 0;
+        _titleBar.Bounds = new Rectangle(0, y, w, BarH);
+        y += BarH;
+        _headerTitle.Bounds = new Rectangle(0, y, w, TitleH);
+        y += TitleH;
+        _headerToolbar.Bounds = new Rectangle(0, y, w, ToolbarH);
+
+        // 操作栏：左主操作组（间距 8），趋势分析靠右
+        int bx = Theme.SpaceXL;
+        btnScan.Location = new Point(bx, 5); bx += btnScan.Width + Theme.SpaceS;
+        btnClean.Location = new Point(bx, 5); bx += btnClean.Width + Theme.SpaceS;
+        btnSelectAll.Location = new Point(bx, 5); bx += btnSelectAll.Width + Theme.SpaceS;
+        btnSelectNone.Location = new Point(bx, 5); bx += btnSelectNone.Width + Theme.SpaceS;
+        btnCancel.Location = new Point(bx, 5);
+        btnTrend.Location = new Point(w - btnTrend.Width - Theme.SpaceXL, 5);
+        y += ToolbarH;
+
+        // 内容区（弹性）
+        int bottomReserve = StatusH + ProgressH + Theme.SpaceS * 2;
+        contentPanel.Bounds = new Rectangle(Theme.SpaceXL, y + Theme.SpaceS,
+            w - Theme.SpaceXL * 2, h - y - bottomReserve - Theme.SpaceS);
+        contentPanel.Padding = new Padding(Theme.SpaceM, 38, Theme.SpaceM, Theme.SpaceM);
+        lblFound.Location = new Point(contentPanel.Width - lblFound.Width - Theme.SpaceL, 10);
+        lblSection.Location = new Point(Theme.SpaceL, 8);
+
+        // 进度条 + 状态区
+        progress.Bounds = new Rectangle(Theme.SpaceXL, h - StatusH - Theme.SpaceM - ProgressH - 2,
+            w - Theme.SpaceXL * 2, ProgressH);
+        _statusArea.Bounds = new Rectangle(Theme.SpaceXL, h - StatusH - Theme.SpaceM,
+            w - Theme.SpaceXL * 2, StatusH);
+        LayoutStatusArea(_statusArea);
+
+        // 标题栏子控件
+        lblBarTitle.Location = new Point(Theme.SpaceL, 10);
+        btnMin.Bounds = new Rectangle(w - 92, 0, 46, BarH);
+        btnClose.Bounds = new Rectangle(w - 46, 0, 46, BarH);
+    }
+
+    /// <summary>状态区布局（从右往左）：预览开关 → 已选择 → 可释放；从左往右：圆点 → 标题 → 详情</summary>
+    private void LayoutStatusArea(Control sa)
+    {
+        chkPreview.Location = new Point(sa.Width - chkPreview.Width - Theme.SpaceL, 12);
+        lblSelected.Location = new Point(chkPreview.Location.X - lblSelected.Width - Theme.SpaceM, 15);
+        lblReclaim.Location = new Point(lblSelected.Location.X - lblReclaim.Width - Theme.SpaceM, 14);
+        lblStateDot.Location = new Point(Theme.SpaceL, 16);
+        lblStateTitle.Location = new Point(Theme.SpaceL + 20, 14);
+        lblStateDetail.Location = new Point(Theme.SpaceL + 20 + lblStateTitle.Width + Theme.SpaceM, 16);
+    }
+
+    /// <summary>统一设置操作按钮的启用状态</summary>
     private void SetControlsEnabled(bool enabled)
     {
         btnScan.Enabled = enabled;
         btnClean.Enabled = enabled;
         btnSelectAll.Enabled = enabled;
         btnSelectNone.Enabled = enabled;
+        btnCancel.Enabled = !enabled;   // 取消常驻：仅扫描/清理期间可点
+    }
+
+    /// <summary>状态机驱动：白纱 / 状态圆点 / 状态文案 / 主按钮动态</summary>
+    private void SetState(UiState state, string? title = null, string? detail = null)
+    {
+        _state = state;
+        contentPanel.VeilAlpha = state.VeilAlpha();
+        contentPanel.Invalidate();
+
+        lblStateDot.ForeColor = state switch
+        {
+            UiState.Idle => Theme.TextSub,
+            UiState.Scanning or UiState.Cleaning => Theme.Primary,
+            UiState.ScanCompleted or UiState.CleanCompleted => Theme.Success,
+            UiState.Error => Theme.Risk,
+            _ => Theme.Warn
+        };
+        if (title != null) lblStateTitle.Text = title;
+        if (detail != null) lblStateDetail.Text = detail;
+        LayoutStatusArea(_statusArea);
+
+        // 动态主按钮：扫描前主按钮是「扫描缓存」，扫描完成后让位给「清理选中」
+        if (state == UiState.ScanCompleted || state == UiState.CleanCompleted)
+        {
+            btnScan.Style = ButtonStyle.Secondary;
+            btnClean.Style = ButtonStyle.Primary;
+        }
+        else
+        {
+            btnScan.Style = ButtonStyle.Primary;
+            btnClean.Style = ButtonStyle.Secondary;
+        }
+        btnScan.Invalidate();
+        btnClean.Invalidate();
+
+        lblEmpty.Visible = dgv.Rows.Count == 0 && state == UiState.Idle;
     }
 
     private void Dgv_CellContentClick(object? sender, DataGridViewCellEventArgs e)
@@ -349,7 +529,7 @@ public class MainForm : Form
         if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name == "Checked")
         {
             dgv.EndEdit();
-            UpdateTotalSize();
+            UpdateSelected();
         }
     }
 
@@ -363,53 +543,85 @@ public class MainForm : Form
             e.FormattingApplied = true;
         }
 
-        if (dgv.Columns[e.ColumnIndex].Name == "Risk" && e.Value is RiskLevel risk)
-        {
-            e.Value = risk switch
-            {
-                RiskLevel.Safe => "安全",
-                RiskLevel.Warn => "注意",
-                RiskLevel.Danger => "危险",
-                _ => risk.ToString()
-            };
-            e.FormattingApplied = true;
-            e.CellStyle!.ForeColor = risk switch
-            {
-                RiskLevel.Safe => SuccessGreen,
-                RiskLevel.Warn => WarnYellow,
-                RiskLevel.Danger => DangerRed,
-                _ => Color.Black
-            };
-            e.CellStyle.Font = FontNormalBold;
-        }
-
         if (dgv.Columns[e.ColumnIndex].Name == "Name")
         {
             var pathVal = dgv.Rows[e.RowIndex].Cells["Path"].Value?.ToString();
             if (string.IsNullOrEmpty(pathVal))
-                e.CellStyle!.ForeColor = Color.Gray;
+                e.CellStyle!.ForeColor = Theme.TextSub;
         }
     }
 
+    /// <summary>状态列小型圆角标签（浅底深字，替代大色块文字）</summary>
+    private void Dgv_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+        if (dgv.Columns[e.ColumnIndex].Name != "Risk" || e.Value is not string tag) return;
+
+        var (bg, fg) = tag switch
+        {
+            "安全" => (Color.FromArgb(0xE4, 0xF5, 0xEC), Color.FromArgb(0x17, 0x84, 0x5B)),
+            "注意" => (Color.FromArgb(0xFD, 0xF0, 0xDC), Color.FromArgb(0xA9, 0x6A, 0x00)),
+            "危险" => (Color.FromArgb(0xFB, 0xE4, 0xE4), Color.FromArgb(0xC0, 0x39, 0x2B)),
+            _ => (Color.White, Theme.TextSub)
+        };
+
+        e.PaintBackground(e.ClipBounds, true);
+        var r = new Rectangle(e.CellBounds.X + (e.CellBounds.Width - 52) / 2, e.CellBounds.Y + 9, 52, 20);
+        using (var path = Theme.Rounded(r, 6))
+        using (var b = new SolidBrush(bg))
+        {
+            e.Graphics.FillPath(b, path);
+        }
+        TextRenderer.DrawText(e.Graphics, tag, new Font(Theme.FontFamily, 11F), r, fg,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        e.Handled = true;
+    }
+
+    /// <summary>行悬停：淡蓝 #F4F8FF</summary>
+    private void Dgv_CellMouseEnter(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.RowIndex >= dgv.Rows.Count) return;
+        _hoverRow = e.RowIndex;
+        var row = dgv.Rows[e.RowIndex];
+        if (row.Selected) return;
+        row.DefaultCellStyle.BackColor = Color.FromArgb(0xF4, 0xF8, 0xFF);
+    }
+
+    private void Dgv_CellMouseLeave(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.RowIndex >= dgv.Rows.Count) return;
+        _hoverRow = -1;
+        var row = dgv.Rows[e.RowIndex];
+        if (row.Selected) return;
+        row.DefaultCellStyle.BackColor = (e.RowIndex % 2 == 0) ? Color.White : Color.FromArgb(0xFA, 0xFC, 0xFF);
+    }
+
     /// <summary>
-    /// 扫描按钮点击（两阶段：已知缓存 + 自动发现）
+    /// 扫描按钮点击（三阶段：已知缓存 + 自动发现 + 项目工件）
     /// </summary>
     private async void BtnScan_Click(object? sender, EventArgs e)
     {
         SetControlsEnabled(false);
-        btnCancel.Visible = true;
-        progressBar.Visible = true;
-        lblStatus.Text = "  正在扫描已知缓存...";
+        SetState(UiState.Scanning, "扫描中", "");
+        progress.Indeterminate = true;
+        progress.Visible = true;
+        lblCount.Text = "";
         dgv.Rows.Clear();
+        lblFound.Text = "";
+        lblEmpty.Visible = false;
+        LayoutStatusArea(_statusArea);
 
         _cts = new CancellationTokenSource();
-        var token = _cts.Token; // 捕获到局部变量，防止清理 finally 将 _cts 置 null 后访问报错
+        var token = _cts.Token;
         var knownProgress = new Progress<(int current, int total, string name)>(p =>
         {
-            progressBar.Style = ProgressBarStyle.Continuous;
-            progressBar.Maximum = p.total;
-            progressBar.Value = Math.Min(p.current, p.total);
-            lblStatus.Text = $"  扫描已知缓存: {p.name} ({p.current}/{p.total})";
+            progress.Indeterminate = false;
+            progress.Maximum = p.total;
+            progress.Value = Math.Min(p.current, p.total);
+            lblStateTitle.Text = "扫描中";
+            lblStateDetail.Text = $"正在检查 {p.name}";
+            lblCount.Text = $"{p.current} / {p.total}";
+            LayoutStatusArea(_statusArea);
         });
 
         try
@@ -423,14 +635,16 @@ public class MainForm : Form
                 AddCacheRow(item, isKnown: true);
             }
 
-            UpdateTotalSize();
-            lblStatus.Text = $"  已知缓存扫描完成 ({dgv.Rows.Count} 项)，正在自动发现更多缓存...";
+            UpdateSelected();
+            lblStateTitle.Text = "扫描中";
+            lblStateDetail.Text = "自动发现更多缓存目录";
+            progress.Indeterminate = true;
 
-            // Phase 2: 自动发现（较慢，10-30秒）
+            // Phase 2+3: 自动发现 + 项目工件（较慢）
             var autoProgress = new Progress<(int dirsScanned, string currentPath)>(p =>
             {
-                progressBar.Style = ProgressBarStyle.Marquee;
-                lblStatus.Text = $"  自动发现: 已扫描 {p.dirsScanned} 个目录... ({p.currentPath})";
+                progress.Indeterminate = true;
+                lblStateDetail.Text = $"自动发现缓存目录（已检查 {p.dirsScanned} 个目录）";
             });
 
             var autoItems = await Task.Run(() =>
@@ -448,26 +662,40 @@ public class MainForm : Form
             CleanLog.LogScan(knownItems.Concat(autoItems).ToList());
 
             // 按大小降序排列：清理收益一目了然；无路径的命令式项（0 B）自然沉底
-            // Size 列在 SetupControls 中创建，此处用 null 容忍运算符声明不变量
             dgv.Sort(dgv.Columns["Size"]!, ListSortDirection.Descending);
 
-            lblStatus.Text = $"  扫描完成: {dgv.Rows.Count} 个缓存项目 (其中 {autoCount} 个自动发现)。";
-            UpdateTotalSize();
+            long reclaimable = 0;
+            for (int i = 0; i < dgv.Rows.Count; i++)
+                reclaimable += dgv.Rows[i].Cells["Size"].Value as long? ?? 0;
+
+            SetState(UiState.ScanCompleted, "扫描完成", $"发现 {dgv.Rows.Count} 个缓存项");
+            lblReclaim.Text = $"可释放 {CacheScanner.FormatSize(reclaimable)}";
+            lblFound.Text = $"已发现 {dgv.Rows.Count} 项";
+            lblFound.Location = new Point(contentPanel.Width - lblFound.Width - Theme.SpaceL, 10);
+            lblCount.Text = "";
+            progress.Visible = false;
+            progress.Indeterminate = false;
+            lblEmpty.Visible = dgv.Rows.Count == 0;
+            LayoutStatusArea(_statusArea);
+            UpdateSelected();
         }
         catch (OperationCanceledException)
         {
-            lblStatus.Text = "  扫描已取消。";
+            SetState(UiState.Cancelled, "已取消扫描", "");
+            progress.Visible = false;
+            progress.Indeterminate = false;
+            lblCount.Text = "";
+            lblEmpty.Visible = dgv.Rows.Count == 0;
         }
         catch (Exception ex)
         {
-            lblStatus.Text = $"  扫描出错: {ex.Message}";
+            SetState(UiState.Error, "扫描出错", ex.Message);
+            progress.Visible = false;
+            progress.Indeterminate = false;
             Debug.WriteLine($"扫描异常: {ex}");
         }
         finally
         {
-            progressBar.Style = ProgressBarStyle.Continuous;
-            progressBar.Visible = false;
-            btnCancel.Visible = false;
             SetControlsEnabled(true);
             _cts?.Dispose();
             _cts = null;
@@ -489,8 +717,9 @@ public class MainForm : Form
             item.Path
         );
 
+        // 自动发现项文字降一档（信息权重：已知规则优先）
         if (!isKnown)
-            dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(225, 235, 255);
+            dgv.Rows[rowIdx].Cells["Name"].Style.ForeColor = Theme.TextSub;
 
         // 默认勾选：有上次清理记录时按记录恢复；首次使用（无记录）按已知安全项自动勾选；
         // 自动发现按目录名匹配（≠纯缓存），一律交由用户逐项确认
@@ -539,14 +768,14 @@ public class MainForm : Form
         if (warnItems.Count > 0)
             warning += $"\n\n注意项目:\n{string.Join("\n", warnItems.Select(x => $"  - {x.name}"))}\n请确保相关程序已关闭。";
 
+        bool dryRun = chkPreview.Checked;
+        if (dryRun)
+            warning = "【预览模式】不会删除任何文件，仅统计将释放的空间。\n" + warning;
+
         // 检测正在运行、可能占用缓存的程序（P1-1）
         var runningApps = CacheScanner.DetectRunningTargets();
         if (runningApps.Count > 0)
             warning += $"\n\n检测到以下程序正在运行，其缓存可能被占用：\n  {string.Join("、", runningApps)}\n建议先关闭后再清理，否则相关文件将被跳过或登记为重启删除。";
-
-        bool dryRun = chkPreview.Checked;
-        if (dryRun)
-            warning = "【预览模式】不会删除任何文件，仅统计将释放的空间。\n" + warning;
 
         var result = MessageBox.Show(
             $"确认清理 {selectedItems.Count} 个项目？{warning}",
@@ -564,16 +793,22 @@ public class MainForm : Form
                 checkedNames.Add(dgv.Rows[i].Cells["Name"].Value?.ToString() ?? "");
         AppSettings.Save(chkPreview.Checked, checkedNames);
 
-        // 释放量的诚实口径：以 C 盘可用空间差为准（其他程序并发写入也会影响该差值）
+        // 释放量的诚实口径：以磁盘可用空间差为准（其他程序并发写入也会影响该差值）
         long freeBefore = CacheScanner.GetCFreeBytes();
         CleanLog.LogCleanStart(selectedItems.Count, freeBefore, dryRun);
         CacheScanner.DryRun = dryRun;
 
         SetControlsEnabled(false);
-        progressBar.Visible = true;
+        SetState(UiState.Cleaning, "清理中", "");
+        progress.Indeterminate = false;
+        progress.Maximum = selectedItems.Count;
+        progress.Value = 0;
+        progress.Visible = true;
+        lblCount.Text = $"0 / {selectedItems.Count}";
+        LayoutStatusArea(_statusArea);
 
         _cts = new CancellationTokenSource();
-        var progress = new Progress<string>(msg => lblStatus.Text = $"  {msg}");
+        var progress2 = new Progress<string>(msg => lblStateDetail.Text = msg);
         var total = new CleanResult();
 
         try
@@ -583,40 +818,41 @@ public class MainForm : Form
                 _cts.Token.ThrowIfCancellationRequested();
                 var (rowIdx, name, path, _) = selectedItems[i];
 
-                lblStatus.Text = $"  正在清理: {name} ({i + 1}/{selectedItems.Count})";
-                progressBar.Maximum = selectedItems.Count;
-                progressBar.Value = i + 1;
-                dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(255, 243, 205);
+                lblStateDetail.Text = name;
+                progress.Value = i + 1;
+                lblCount.Text = $"{i + 1} / {selectedItems.Count}";
+                dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(0xFD, 0xF3, 0xDC);
 
                 var item = new CacheItem { Name = name, Path = path, Exists = true };
-                var itemResult = await Task.Run(() => CacheScanner.CleanItem(item, progress, _cts.Token));
+                var itemResult = await Task.Run(() => CacheScanner.CleanItem(item, progress2, _cts.Token));
                 total += itemResult;
                 CleanLog.LogCleanItem(name, path, itemResult);
 
                 // 预览：仅高亮不改大小；FreedBytes>0 表示释放了空间；DeletedCount>0 覆盖命令式项
                 if (dryRun)
                 {
-                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(255, 243, 205);
+                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(0xFB, 0xF0, 0xD4);
                 }
                 else if (itemResult.FreedBytes > 0 || itemResult.DeletedCount > 0)
                 {
                     dgv.Rows[rowIdx].Cells["Size"].Value = item.SizeBytes;
-                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(212, 237, 218);
+                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(0xE4, 0xF5, 0xEC);
                 }
                 else
                 {
-                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.FromArgb(230, 235, 245);
+                    dgv.Rows[rowIdx].DefaultCellStyle.BackColor = Color.White;
                 }
             }
 
             string freedStr = CacheScanner.FormatSize(total.FreedBytes);
             long freeAfter = CacheScanner.GetCFreeBytes();
             string statusDetail = total.TotalFailures > 0 ? $"（跳过 {total.TotalFailures} 个）" : "";
-            lblStatus.Text = dryRun
-                ? $"  预览完成！将释放 {freedStr} {statusDetail}（未实际删除）。"
-                : $"  清理完成！共释放 {freedStr} {statusDetail}。C 盘可用 +{CacheScanner.FormatSize(Math.Max(0, freeAfter - freeBefore))}";
-            lblTotal.Text = $"{(dryRun ? "将释放" : "释放")}: {freedStr}  ";
-            lblTotal.ForeColor = SuccessGreen;
+            SetState(dryRun ? UiState.ScanCompleted : UiState.CleanCompleted,
+                dryRun ? "预览完成" : "清理完成",
+                dryRun ? $"将释放 {freedStr}（未实际删除）" : $"释放 {freedStr}{statusDetail} · 磁盘净增 {CacheScanner.FormatSize(Math.Max(0, freeAfter - freeBefore))}");
+            progress.Visible = false;
+            lblCount.Text = "";
+            LayoutStatusArea(_statusArea);
 
             MessageBox.Show(
                 BuildCleanSummary(total, freedStr, freeBefore, freeAfter, dryRun),
@@ -628,17 +864,19 @@ public class MainForm : Form
         }
         catch (OperationCanceledException)
         {
-            lblStatus.Text = "  清理已取消。";
+            SetState(UiState.Cancelled, "已取消清理", "");
+            progress.Visible = false;
+            lblCount.Text = "";
         }
         catch (Exception ex)
         {
-            lblStatus.Text = $"  清理出错: {ex.Message}";
+            SetState(UiState.Error, "清理出错", ex.Message);
+            progress.Visible = false;
             Debug.WriteLine($"清理异常: {ex}");
         }
         finally
         {
             CacheScanner.DryRun = false;
-            progressBar.Visible = false;
             SetControlsEnabled(true);
             _cts?.Dispose();
             _cts = null;
@@ -674,7 +912,7 @@ public class MainForm : Form
         }
         else
         {
-            summary += $"\n\nC 盘可用空间: {CacheScanner.FormatSize(freeBefore)} → {CacheScanner.FormatSize(freeAfter)}" +
+            summary += $"\n\n磁盘可用空间: {CacheScanner.FormatSize(freeBefore)} → {CacheScanner.FormatSize(freeAfter)}" +
                        $"（净增 {CacheScanner.FormatSize(Math.Max(0, freeAfter - freeBefore))}）";
             summary += "\n（文件累计与磁盘差值可能不同：其他程序同时在写入，重启删除的空间在重启后才回收）";
         }
@@ -682,7 +920,8 @@ public class MainForm : Form
         return summary;
     }
 
-    private void UpdateTotalSize()
+    /// <summary>已选择体积（同步到状态区）</summary>
+    private void UpdateSelected()
     {
         long total = 0;
         for (int i = 0; i < dgv.Rows.Count; i++)
@@ -690,8 +929,8 @@ public class MainForm : Form
             if (dgv.Rows[i].Cells["Checked"].Value is true)
                 total += dgv.Rows[i].Cells["Size"].Value as long? ?? 0;
         }
-        lblTotal.Text = $"选中: {CacheScanner.FormatSize(total)}  ";
-        lblTotal.ForeColor = total > 0 ? AccentBlue : Color.Gray;
+        lblSelected.Text = $"已选择 {CacheScanner.FormatSize(total)}";
+        LayoutStatusArea(_statusArea);
     }
 
     private void SetAllChecked(bool check)
@@ -707,7 +946,7 @@ public class MainForm : Form
             dgv.ResumeLayout();
         }
         dgv.EndEdit();
-        UpdateTotalSize();
+        UpdateSelected();
     }
 
     protected override void Dispose(bool disposing)
@@ -716,13 +955,15 @@ public class MainForm : Form
         {
             _cts?.Cancel();
             _cts?.Dispose();
-            ThemeBg?.Dispose();
         }
         base.Dispose(disposing);
     }
 
+    [DllImport("dwmapi.dll")]
+    private static extern void DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
     /// <summary>
-    /// 自定义 DataGridView：重绘背景为半透明主题图片，使背景图片能穿透表格显示
+    /// 自定义 DataGridView：底图切片绘制（空闲时角色透出），行高 38、淡分隔、无纵线
     /// </summary>
     private class AnimeDataGridView : DataGridView
     {
@@ -731,24 +972,78 @@ public class MainForm : Form
         public AnimeDataGridView(MainForm owner)
         {
             _owner = owner;
+            DoubleBuffered = true;
         }
 
         protected override void PaintBackground(Graphics graphics, Rectangle clipBounds, Rectangle gridBounds)
         {
             try
             {
-                var form = _owner;
-                if (form.IsHandleCreated && Parent != null)
-                {
-                    var screenPos = form.PointToClient(Parent.PointToScreen(Location));
-                    graphics.TranslateTransform(-screenPos.X, -screenPos.Y);
-                    form.DrawThemeBackground(graphics, new Rectangle(0, 0, form.ClientSize.Width, form.ClientSize.Height));
-                    graphics.TranslateTransform(screenPos.X, screenPos.Y);
-                    return;
-                }
+                // 切片绘制窗体背景（空闲时角色透出；内容由白色主面板保证可读性）
+                var gridLoc = _owner.PointToClient(PointToScreen(Point.Empty));
+                Theme.DrawSlice(graphics, new Rectangle(gridLoc, Size), _owner.ClientSize);
+                using var veil = new SolidBrush(Color.FromArgb(210, 255, 255, 255));
+                graphics.FillRectangle(veil, clipBounds);
             }
-            catch { }
-            base.PaintBackground(graphics, clipBounds, gridBounds);
+            catch
+            {
+                base.PaintBackground(graphics, clipBounds, gridBounds);
+            }
         }
     }
+
+    /// <summary>标题栏按钮种类</summary>
+    private enum CaptionKind { Minimize, Close }
+
+    /// <summary>自绘标题栏按钮（最小化/关闭；hover 灰 / 关闭 hover 红）</summary>
+    private sealed class CaptionButton : Control
+    {
+        private readonly char _glyph;
+        private readonly CaptionKind _kind;
+        private bool _hover;
+
+        public CaptionButton(char glyph, CaptionKind kind)
+        {
+            _glyph = glyph;
+            _kind = kind;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint
+                     | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            Font = new Font("Segoe MDL2 Assets", 10F);
+            Cursor = Cursors.Hand;
+            TabStop = false;
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            Theme.DrawSliceUnder(this, e.Graphics);
+            if (_hover)
+            {
+                using var b = new SolidBrush(_kind == CaptionKind.Close
+                    ? Color.FromArgb(0xE8, 0x11, 0x23)
+                    : Color.FromArgb(0xE2, 0xEA, 0xF6));
+                e.Graphics.FillRectangle(b, ClientRectangle);
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var color = (_hover && _kind == CaptionKind.Close) ? Color.White : Theme.TextMain;
+            TextRenderer.DrawText(e.Graphics, _glyph.ToString(), Font, ClientRectangle, color,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        }
+
+        protected override void OnClick(EventArgs e)
+        {
+            base.OnClick(e);
+            if (_kind == CaptionKind.Minimize)
+                (FindForm() as MainForm)?.MinimizeWindow();
+            else
+                (FindForm() as MainForm)?.Close();
+        }
+    }
+
+    internal void MinimizeWindow() => WindowState = FormWindowState.Minimized;
 }
