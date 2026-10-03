@@ -7,7 +7,7 @@ namespace CacheCleaner;
 
 /// <summary>
 /// 主界面（v5.1 一体化改版）：无边框圆角窗口 + 四层视觉体系。
-/// L0 底色 #F5F8FD / L1 整窗插画（cover、center-right、白纱 0.44）/ L2 半透明白色内容面板 /
+/// L0 浅色底 / L1 右侧等比插画与渐变遮罩 / L2 半透明白色内容面板 /
 /// L3 控件。标题栏自绘（图标 + C盘缓存清理 + 最小化/关闭，可拖动），按钮按
 /// Primary/Secondary/Ghost 层级动态分配主按钮。固定尺寸窗口 → 绝对布局。
 /// 业务逻辑与皮肤完全解耦。
@@ -61,12 +61,15 @@ public class MainForm : Form
 
     private CancellationTokenSource? _cts;
     private int _hoverRow = -1;
+    private bool _layoutReady;
 
     public MainForm()
     {
         SetupForm();
         SetupControls();
+        _layoutReady = true;
         LayoutUI();
+        SetControlsEnabled(true);
 
         // 设置持久化：恢复预览开关；关闭窗口时保存当前勾选
         AppSettings.Load();
@@ -144,7 +147,7 @@ public class MainForm : Form
     private void SetupControls()
     {
         // ---- 自绘标题栏（40px，与背景连成一体）----
-        _titleBar = new SoftPanel { VeilAlpha = 0 };
+        _titleBar = new SoftPanel { VeilAlpha = 170 };
         _titleBar.MouseDown += TitleBar_MouseDown;
 
         lblBarTitle = new Label
@@ -156,6 +159,7 @@ public class MainForm : Form
             BackColor = Color.Transparent
         };
         _titleBar.Controls.Add(lblBarTitle);
+        lblBarTitle.MouseDown += TitleBar_MouseDown;
 
         btnMin = new CaptionButton('\uE921', CaptionKind.Minimize);
         btnClose = new CaptionButton('\uE8BB', CaptionKind.Close);
@@ -164,7 +168,7 @@ public class MainForm : Form
         Controls.Add(_titleBar);
 
         // ---- 头部第一层（58px）：产品名 ----
-        _headerTitle = new SoftPanel { VeilAlpha = 0 };
+        _headerTitle = new SoftPanel { VeilAlpha = 170 };
 
         lblTitle = new Label
         {
@@ -187,7 +191,7 @@ public class MainForm : Form
         Controls.Add(_headerTitle);
 
         // ---- 头部第二层（46px）：操作栏 ----
-        _headerToolbar = new SoftPanel { VeilAlpha = 0 };
+        _headerToolbar = new SoftPanel { VeilAlpha = 190 };
 
         btnScan = MakeButton("扫描缓存", '\uE721', ButtonStyle.Primary);
         btnClean = MakeButton("清理选中", '\uE74D', ButtonStyle.Secondary);
@@ -240,10 +244,6 @@ public class MainForm : Form
             BackColor = Color.Transparent,
             Visible = true
         };
-        contentPanel.Controls.Add(lblFound);
-        contentPanel.Controls.Add(lblSection);
-        contentPanel.Controls.Add(lblEmpty);
-
         var listPanel = new RoundedContainer { Dock = DockStyle.Fill, Padding = new Padding(1) };
         contentPanel.Controls.Add(listPanel);
         Controls.Add(contentPanel);
@@ -276,6 +276,7 @@ public class MainForm : Form
                 SelectionForeColor = Theme.TextMain
             },
             ColumnHeadersHeight = 34,
+            ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None,
             ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
             DefaultCellStyle =
             {
@@ -311,7 +312,7 @@ public class MainForm : Form
         };
         var colSize = new DataGridViewTextBoxColumn
         {
-            Name = "Size", HeaderText = "大小", Width = 104, ReadOnly = true,
+            Name = "Size", HeaderText = "大小", Width = 126, ReadOnly = true,
             DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight }
         };
         var colDesc = new DataGridViewTextBoxColumn
@@ -338,9 +339,21 @@ public class MainForm : Form
         dgv.CellMouseEnter += Dgv_CellMouseEnter;
         dgv.CellMouseLeave += Dgv_CellMouseLeave;
         listPanel.Controls.Add(dgv);
+        var sectionStrip = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = Color.FromArgb(248, 251, 255) };
+        lblSection.Font = Theme.BodyBoldFont;
+        lblSection.Location = new Point(14, 10);
+        sectionStrip.Controls.AddRange([lblSection, lblFound]);
+        void PositionFound() => lblFound.Location = new Point(Math.Max(0, sectionStrip.Width - lblFound.Width - 14), 12);
+        sectionStrip.Resize += (_, _) => PositionFound();
+        lblFound.SizeChanged += (_, _) => PositionFound();
+        listPanel.Controls.Add(sectionStrip);
+        dgv.BringToFront();
+        // 空状态属于表格，避免兄弟控件互相遮挡。
+        dgv.Controls.Add(lblEmpty);
+        dgv.Resize += (_, _) => lblEmpty.Bounds = new Rectangle(24, 50, Math.Max(1, dgv.Width * 2 / 5), Math.Max(1, dgv.Height - 70));
 
         // ---- 底部状态区（46px）----
-        _statusArea = new SoftPanel { VeilAlpha = 0, ShowTopLine = true };
+        _statusArea = new SoftPanel { VeilAlpha = 190, ShowTopLine = true };
 
         lblStateDot = new Label
         {
@@ -363,7 +376,8 @@ public class MainForm : Form
             Text = "",
             Font = Theme.SmallFont,
             ForeColor = Theme.TextSub,
-            AutoSize = true,
+            AutoSize = false,
+            AutoEllipsis = true,
             BackColor = Color.Transparent
         };
         lblReclaim = new Label
@@ -397,7 +411,8 @@ public class MainForm : Form
         _statusArea.Controls.Add(lblStateDetail);
         _statusArea.Controls.Add(lblReclaim);
         _statusArea.Controls.Add(lblSelected);
-        _statusArea.Controls.Add(chkPreview);
+        _headerTitle.Controls.Add(chkPreview);
+        _statusArea.Controls.Add(lblCount = new Label { AutoSize = true, Font = Theme.SmallFont, ForeColor = Theme.TextSub, BackColor = Color.Transparent });
         Controls.Add(_statusArea);
 
         // ---- 细进度条（仅扫描/清理期间出现）----
@@ -423,68 +438,78 @@ public class MainForm : Form
     private void LayoutUI()
     {
         // OnResize 会在构造期间（控件尚未创建）触发，守卫避免 NRE
-        if (ReferenceEquals(btnScan, null) || ReferenceEquals(_titleBar, null)
-            || ReferenceEquals(contentPanel, null) || ReferenceEquals(lblFound, null)) return;
+        if (!_layoutReady) return;
         var w = ClientSize.Width;
         var h = ClientSize.Height;
         if (w < 100 || h < 100) return;
+        int S(int value) => (int)Math.Round(value * DeviceDpi / 96d);
 
         int y = 0;
-        _titleBar.Bounds = new Rectangle(0, y, w, BarH);
-        y += BarH;
-        _headerTitle.Bounds = new Rectangle(0, y, w, TitleH);
-        y += TitleH;
-        _headerToolbar.Bounds = new Rectangle(0, y, w, ToolbarH);
+        _titleBar.Bounds = new Rectangle(0, y, w, S(BarH));
+        y += S(BarH);
+        _headerTitle.Bounds = new Rectangle(0, y, w, S(TitleH));
+        y += S(TitleH);
+        _headerToolbar.Bounds = new Rectangle(0, y, w, S(ToolbarH));
+        lblTitle.Location = new Point(S(20), S(5));
+        lblSubTitle.Location = new Point(lblTitle.Right + S(14), S(17));
+        chkPreview.Location = new Point(w - chkPreview.Width - S(24), S(18));
 
         // 操作栏：左主操作组（间距 8），趋势分析靠右
-        int bx = Theme.SpaceXL;
-        btnScan.Location = new Point(bx, 5); bx += btnScan.Width + Theme.SpaceS;
-        btnClean.Location = new Point(bx, 5); bx += btnClean.Width + Theme.SpaceS;
-        btnSelectAll.Location = new Point(bx, 5); bx += btnSelectAll.Width + Theme.SpaceS;
-        btnSelectNone.Location = new Point(bx, 5); bx += btnSelectNone.Width + Theme.SpaceS;
-        btnCancel.Location = new Point(bx, 5);
-        btnTrend.Location = new Point(w - btnTrend.Width - Theme.SpaceXL, 5);
-        y += ToolbarH;
+        int bx = S(Theme.SpaceXL);
+        foreach (var button in new[] { btnScan, btnClean, btnSelectAll, btnSelectNone, btnCancel })
+        {
+            FitButton(button);
+            button.Height = S(36);
+            button.Location = new Point(bx, S(5));
+            bx += button.Width + S(8);
+        }
+        FitButton(btnTrend);
+        btnTrend.Height = S(36);
+        btnTrend.Location = new Point(w - btnTrend.Width - S(Theme.SpaceXL), S(5));
+        y += S(ToolbarH);
 
         // 内容区（弹性）
-        int bottomReserve = StatusH + ProgressH + Theme.SpaceS * 2;
-        contentPanel.Bounds = new Rectangle(Theme.SpaceXL, y + Theme.SpaceS,
-            w - Theme.SpaceXL * 2, h - y - bottomReserve - Theme.SpaceS);
-        contentPanel.Padding = new Padding(Theme.SpaceM, 38, Theme.SpaceM, Theme.SpaceM);
-        lblFound.Location = new Point(contentPanel.Width - lblFound.Width - Theme.SpaceL, 10);
-        lblSection.Location = new Point(Theme.SpaceL, 8);
+        int bottomReserve = S(StatusH + ProgressH + Theme.SpaceS * 2);
+        contentPanel.Bounds = new Rectangle(S(Theme.SpaceXL), y + S(Theme.SpaceS),
+            w - S(Theme.SpaceXL * 2), Math.Max(1, h - y - bottomReserve - S(Theme.SpaceS)));
+        contentPanel.Padding = new Padding(0);
 
         // 进度条 + 状态区
-        progress.Bounds = new Rectangle(Theme.SpaceXL, h - StatusH - Theme.SpaceM - ProgressH - 2,
-            w - Theme.SpaceXL * 2, ProgressH);
-        _statusArea.Bounds = new Rectangle(Theme.SpaceXL, h - StatusH - Theme.SpaceM,
-            w - Theme.SpaceXL * 2, StatusH);
+        progress.Bounds = new Rectangle(S(Theme.SpaceXL), h - S(StatusH + Theme.SpaceM + ProgressH + 2),
+            w - S(Theme.SpaceXL * 2), S(ProgressH));
+        _statusArea.Bounds = new Rectangle(S(Theme.SpaceXL), h - S(StatusH + Theme.SpaceM),
+            w - S(Theme.SpaceXL * 2), S(StatusH));
         LayoutStatusArea(_statusArea);
 
         // 标题栏子控件
-        lblBarTitle.Location = new Point(Theme.SpaceL, 10);
-        btnMin.Bounds = new Rectangle(w - 92, 0, 46, BarH);
-        btnClose.Bounds = new Rectangle(w - 46, 0, 46, BarH);
+        lblBarTitle.Location = new Point(S(Theme.SpaceL), S(10));
+        btnMin.Bounds = new Rectangle(w - S(92), 0, S(46), S(BarH));
+        btnClose.Bounds = new Rectangle(w - S(46), 0, S(46), S(BarH));
     }
 
-    /// <summary>状态区布局（从右往左）：预览开关 → 已选择 → 可释放；从左往右：圆点 → 标题 → 详情</summary>
+    /// <summary>统计靠右，详情限制可用宽度；预览开关独立放在头部。</summary>
     private void LayoutStatusArea(Control sa)
     {
-        chkPreview.Location = new Point(sa.Width - chkPreview.Width - Theme.SpaceL, 12);
-        lblSelected.Location = new Point(chkPreview.Location.X - lblSelected.Width - Theme.SpaceM, 15);
-        lblReclaim.Location = new Point(lblSelected.Location.X - lblReclaim.Width - Theme.SpaceM, 14);
-        lblStateDot.Location = new Point(Theme.SpaceL, 16);
-        lblStateTitle.Location = new Point(Theme.SpaceL + 20, 14);
-        lblStateDetail.Location = new Point(Theme.SpaceL + 20 + lblStateTitle.Width + Theme.SpaceM, 16);
+        if (!_layoutReady) return;
+        int S(int value) => (int)Math.Round(value * DeviceDpi / 96d);
+        lblSelected.Location = new Point(sa.Width - lblSelected.Width - S(12), S(15));
+        lblReclaim.Location = new Point(lblSelected.Left - lblReclaim.Width - S(16), S(14));
+        lblStateDot.Location = new Point(S(12), S(16));
+        lblStateTitle.Location = new Point(S(32), S(14));
+        lblStateDetail.Bounds = new Rectangle(lblStateTitle.Right + S(12), S(15),
+            Math.Max(0, lblReclaim.Left - lblStateTitle.Right - S(28)), S(24));
+        lblCount.Location = new Point(sa.Width - lblCount.Width - S(12), 0);
     }
 
     /// <summary>统一设置操作按钮的启用状态</summary>
     private void SetControlsEnabled(bool enabled)
     {
         btnScan.Enabled = enabled;
-        btnClean.Enabled = enabled;
-        btnSelectAll.Enabled = enabled;
-        btnSelectNone.Enabled = enabled;
+        btnClean.Enabled = enabled && dgv.Rows.Count > 0;
+        btnSelectAll.Enabled = enabled && dgv.Rows.Count > 0;
+        btnSelectNone.Enabled = enabled && dgv.Rows.Count > 0;
+        btnTrend.Enabled = enabled;
+        chkPreview.Enabled = enabled;
         btnCancel.Enabled = !enabled;   // 取消常驻：仅扫描/清理期间可点
     }
 
@@ -492,6 +517,8 @@ public class MainForm : Form
     private void SetState(UiState state, string? title = null, string? detail = null)
     {
         _state = state;
+        btnCancel.Text = state == UiState.Cleaning ? "取消清理" : "取消扫描";
+        LayoutUI();
         contentPanel.VeilAlpha = state.VeilAlpha();
         contentPanel.Invalidate();
 
@@ -555,7 +582,8 @@ public class MainForm : Form
     private void Dgv_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
     {
         if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
-        if (dgv.Columns[e.ColumnIndex].Name != "Risk" || e.Value is not string tag) return;
+        if (dgv.Columns[e.ColumnIndex].Name != "Risk" || e.Value is not RiskLevel risk) return;
+        var tag = risk switch { RiskLevel.Safe => "安全", RiskLevel.Warn => "注意", _ => "危险" };
 
         var (bg, fg) = tag switch
         {
@@ -570,9 +598,9 @@ public class MainForm : Form
         using (var path = Theme.Rounded(r, 6))
         using (var b = new SolidBrush(bg))
         {
-            e.Graphics.FillPath(b, path);
+            e.Graphics!.FillPath(b, path);
         }
-        TextRenderer.DrawText(e.Graphics, tag, new Font(Theme.FontFamily, 11F), r, fg,
+        TextRenderer.DrawText(e.Graphics!, tag, Theme.SmallFont, r, fg,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         e.Handled = true;
     }
@@ -671,7 +699,6 @@ public class MainForm : Form
             SetState(UiState.ScanCompleted, "扫描完成", $"发现 {dgv.Rows.Count} 个缓存项");
             lblReclaim.Text = $"可释放 {CacheScanner.FormatSize(reclaimable)}";
             lblFound.Text = $"已发现 {dgv.Rows.Count} 项";
-            lblFound.Location = new Point(contentPanel.Width - lblFound.Width - Theme.SpaceL, 10);
             lblCount.Text = "";
             progress.Visible = false;
             progress.Indeterminate = false;
@@ -982,7 +1009,7 @@ public class MainForm : Form
                 // 切片绘制窗体背景（空闲时角色透出；内容由白色主面板保证可读性）
                 var gridLoc = _owner.PointToClient(PointToScreen(Point.Empty));
                 Theme.DrawSlice(graphics, new Rectangle(gridLoc, Size), _owner.ClientSize);
-                using var veil = new SolidBrush(Color.FromArgb(210, 255, 255, 255));
+                using var veil = new SolidBrush(Color.FromArgb(_owner._state == UiState.Idle ? 115 : 205, 255, 255, 255));
                 graphics.FillRectangle(veil, clipBounds);
             }
             catch
@@ -1019,6 +1046,11 @@ public class MainForm : Form
         protected override void OnPaintBackground(PaintEventArgs e)
         {
             Theme.DrawSliceUnder(this, e.Graphics);
+            if (Parent is SoftPanel panel)
+            {
+                using var veil = new SolidBrush(Color.FromArgb(panel.VeilAlpha, 248, 251, 255));
+                e.Graphics.FillRectangle(veil, ClientRectangle);
+            }
             if (_hover)
             {
                 using var b = new SolidBrush(_kind == CaptionKind.Close

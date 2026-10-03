@@ -8,7 +8,7 @@ namespace CacheCleaner;
 
 /// <summary>
 /// 设计系统（单一定义点）：色彩 / 字体 / 间距 / 圆角 / 背景层 / 按钮层级 / 进度条。
-/// 背景 = 整窗铺满（cover + center-right），内容面板以半透明白纱浮于其上（四层体系 L0-L3）。
+/// 背景 = 整窗浅色底 + 右侧等比插画与渐变遮罩，内容面板保证数据可读性。
 /// </summary>
 internal static class Theme
 {
@@ -50,13 +50,15 @@ internal static class Theme
     {
         try
         {
-            return Assembly.GetExecutingAssembly().GetManifestResourceStream("CacheCleaner.theme_bg.png")
-                is { } stream ? Image.FromStream(stream) : null;
+            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("CacheCleaner.theme_bg.png");
+            if (stream == null) return null;
+            using var source = Image.FromStream(stream);
+            return new Bitmap(source);
         }
         catch { return null; }
     }
 
-    // ---- 背景层（Layer 0-1）：整窗铺满，cover + center-right ----
+    // ---- 背景层（Layer 0-1）：整窗底色 + 右侧插画 ----
     private static readonly object Gate = new();
     private static Bitmap? _bg;
     private static Size _bgSize;
@@ -76,12 +78,11 @@ internal static class Theme
     public static Bitmap? Background => _bg;
 
     /// <summary>
-    /// 背景层：插画 cover 铺满（KeepAspectRatioByExpanding 等效）、center-right 构图
-    /// （角色居右，左侧留给功能），一轮柔化 + 白纱 0.25（视觉强度约 35%，规范第六节 20-45% 区间）。
+    /// 插画按高度等比放在右侧，渐变遮罩将左侧平滑过渡到页面底色。
     /// </summary>
     private static Bitmap BuildBackground(Size size)
     {
-        var src = LoadThemeImage();
+        using var src = LoadThemeImage();
         var w = Math.Max(1, size.Width);
         var h = Math.Max(1, size.Height);
         var bmp = new Bitmap(w, h);
@@ -90,29 +91,26 @@ internal static class Theme
             g.Clear(PageBg);
             if (src != null)
             {
-                // 一轮半尺寸柔化（轻，不做重模糊）
-                using var soft = new Bitmap(Math.Max(1, src.Width / 2), Math.Max(1, src.Height / 2));
-                using (var gs = Graphics.FromImage(soft))
-                {
-                    gs.InterpolationMode = InterpolationMode.HighQualityBilinear;
-                    gs.DrawImage(src, new Rectangle(0, 0, soft.Width, soft.Height));
-                }
-
-                // cover：KeepAspectRatioByExpanding
-                var scale = Math.Max((double)w / soft.Width, (double)h / soft.Height);
-                var dw = (int)(soft.Width * scale) + 1;
-                var dh = (int)(soft.Height * scale) + 1;
-                // center-right：水平偏右，垂直居中
-                var dst = new Rectangle(w - dw, (h - dh) / 2, dw, dh);
-
+                // 原素材是圆角图标；只采样内部插画，避免将外侧深色边角铺进窗口。
+                var crop = new RectangleF(src.Width * .17f, src.Height * .13f, src.Width * .70f, src.Height * .76f);
+                var scale = h / crop.Height;
+                var dw = crop.Width * scale;
+                var dh = crop.Height * scale;
+                var dst = new RectangleF(w - dw, (h - dh) / 2, dw, dh);
                 using var attrs = new ImageAttributes();
-                attrs.SetColorMatrix(new ColorMatrix { Matrix33 = 0.62f });   // 插画存在感约 38%
+                attrs.SetColorMatrix(new ColorMatrix { Matrix33 = 0.72f });
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                g.DrawImage(soft, dst, 0, 0, soft.Width, soft.Height, GraphicsUnit.Pixel, attrs);
+                g.DrawImage(src, Rectangle.Round(dst), crop.X, crop.Y, crop.Width, crop.Height, GraphicsUnit.Pixel, attrs);
             }
 
-            // 全窗白纱 0.10 再统一柔化一档（内容区另有状态白纱叠加）
-            using var veil = new SolidBrush(Color.FromArgb(26, 248, 251, 255));
+            // 左侧保持干净，右侧保留角色；遮住图标素材裁剪区的硬边。
+            using var veil = new LinearGradientBrush(new Rectangle(0, 0, w, h),
+                Color.FromArgb(225, 246, 249, 254), Color.FromArgb(85, 246, 249, 254), LinearGradientMode.Horizontal);
+            veil.InterpolationColors = new ColorBlend
+            {
+                Positions = [0f, .35f, .58f, 1f],
+                Colors = [PageBg, PageBg, Color.FromArgb(120, PageBg), Color.FromArgb(85, PageBg)]
+            };
             g.FillRectangle(veil, 0, 0, w, h);
         }
         return bmp;
@@ -199,16 +197,6 @@ internal sealed class SoftPanel : Panel
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
     }
 
-    protected override CreateParams CreateParams
-    {
-        get
-        {
-            var cp = base.CreateParams;
-            cp.ExStyle |= 0x02000000; // WS_EX_COMPOSITED
-            return cp;
-        }
-    }
-
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         Theme.DrawSliceUnder(this, e.Graphics);
@@ -237,20 +225,12 @@ internal sealed class RoundedContainer : Panel
         Padding = new Padding(1);
     }
 
-    protected override CreateParams CreateParams
-    {
-        get
-        {
-            var cp = base.CreateParams;
-            cp.ExStyle |= 0x02000000;
-            return cp;
-        }
-    }
-
     protected override void OnResize(EventArgs e)
     {
         using var path = Theme.Rounded(new Rectangle(0, 0, Width, Height), Theme.RadiusPanel);
+        var old = Region;
         Region = new Region(path);
+        old?.Dispose();
         Invalidate();
         base.OnResize(e);
     }
@@ -280,7 +260,7 @@ internal enum ButtonStyle { Primary, Secondary, Ghost }
 /// Primary 实心蓝 + 轻阴影；Secondary 浅蓝底蓝字轻边框；Ghost 透明、hover 浅蓝灰。
 /// hover/pressed 120-200ms 过渡动画（规范第二十六节），线性图标 Segoe MDL2。
 /// </summary>
-internal sealed class GradientButton : Button
+internal sealed class GradientButton : Control
 {
     [Browsable(false), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     internal ButtonStyle Style { get; set; } = ButtonStyle.Primary;
@@ -296,10 +276,13 @@ internal sealed class GradientButton : Button
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint
                  | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-        SetStyle(ControlStyles.Selectable, false);
-        Font = new Font(Theme.FontFamily, 12.25F);
+        SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+        SetStyle(ControlStyles.Selectable, true);
+        BackColor = Color.Transparent;
+        AccessibleRole = AccessibleRole.PushButton;
+        Font = new Font(Theme.FontFamily, 10.5F);
         Cursor = Cursors.Hand;
-        TabStop = false;
+        TabStop = true;
         Size = new Size(116, 36);
     }
 
@@ -314,21 +297,56 @@ internal sealed class GradientButton : Button
     protected override void OnMouseDown(MouseEventArgs e) { _down = true; Invalidate(); base.OnMouseDown(e); }
     protected override void OnMouseUp(MouseEventArgs e) { _down = false; Invalidate(); base.OnMouseUp(e); }
     protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { _down = false; Invalidate(); base.OnLostFocus(e); }
+    protected override bool IsInputKey(Keys keyData) =>
+        (keyData & Keys.KeyCode) is Keys.Space or Keys.Enter || base.IsInputKey(keyData);
+
+    public void PerformClick()
+    {
+        if (Enabled && Visible) OnClick(EventArgs.Empty);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode is Keys.Space or Keys.Enter) { _down = true; Invalidate(); e.Handled = true; }
+        base.OnKeyDown(e);
+    }
+
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        if (_down && (e.KeyCode is Keys.Space or Keys.Enter))
+        {
+            _down = false; Invalidate(); PerformClick(); e.Handled = true;
+        }
+        base.OnKeyUp(e);
+    }
+
+    protected override AccessibleObject CreateAccessibilityInstance() => new ButtonAccessibility(this);
+
+    private sealed class ButtonAccessibility(GradientButton owner) : ControlAccessibleObject(owner)
+    {
+        public override string DefaultAction => "按下";
+        public override void DoDefaultAction() => owner.PerformClick();
+    }
 
     private void StartAnim()
     {
-        _timer ??= new System.Windows.Forms.Timer { Interval = 15 };
-        _timer.Tick += (_, _) =>
+        if (_timer == null)
         {
-            var target = _hover ? 1f : 0f;
-            _anim += Math.Sign(target - _anim) * 0.125f;
-            if (Math.Abs(target - _anim) < 0.02f || _anim is < 0f or > 1f)
+            _timer = new System.Windows.Forms.Timer { Interval = 15 };
+            _timer.Tick += (_, _) =>
             {
-                _anim = target;
-                _timer.Stop();
-            }
-            Invalidate();
-        };
+                var target = _hover ? 1f : 0f;
+                _anim += Math.Sign(target - _anim) * 0.125f;
+                if (Math.Abs(target - _anim) < 0.02f || _anim is < 0f or > 1f)
+                {
+                    _anim = target;
+                    _timer.Stop();
+                }
+                Invalidate();
+            };
+        }
         _timer.Start();
     }
 
@@ -356,6 +374,11 @@ internal sealed class GradientButton : Button
     {
         // Ghost/Secondary 的圆角外露出背景层（插画延伸）
         Theme.DrawSliceUnder(this, e.Graphics);
+        if (Parent is SoftPanel panel)
+        {
+            using var veil = new SolidBrush(Color.FromArgb(panel.VeilAlpha, 248, 251, 255));
+            e.Graphics.FillRectangle(veil, ClientRectangle);
+        }
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -384,22 +407,29 @@ internal sealed class GradientButton : Button
         }
 
         // 线性图标 + 文字（图标 16-18px，间距 6-8px，垂直居中）
-        int textX = 0, textW = Width;
+        using var textBrush = new SolidBrush(text);
+        using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap };
+        var textSize = g.MeasureString(Text, Font);
+        float textX = 0, textW = Width;
         if (IconGlyph != default)
         {
-            var iconSize = TextRenderer.MeasureText(IconGlyph.ToString(), Theme.IconFont);
-            var textSize = TextRenderer.MeasureText(Text, Font);
+            var iconSize = g.MeasureString(IconGlyph.ToString(), Theme.IconFont);
             var total = iconSize.Width + 7 + textSize.Width;
             var iconX = (Width - total) / 2;
-            TextRenderer.DrawText(g, IconGlyph.ToString(), Theme.IconFont,
-                new Rectangle(iconX, 0, iconSize.Width, Height), text,
-                TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
+            g.DrawString(IconGlyph.ToString(), Theme.IconFont, textBrush,
+                new RectangleF(iconX, 0, iconSize.Width, Height), format);
             textX = iconX + iconSize.Width + 7;
             textW = textSize.Width + 6;
         }
-        TextRenderer.DrawText(g, Text, Font,
-            new Rectangle(textX, 0, textW, Height), text,
-            TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis);
+        g.DrawString(Text, Font, textBrush, new RectangleF(textX, 0, textW, Height), format);
+        if (Focused && ShowFocusCues)
+            ControlPaint.DrawFocusRectangle(g, Rectangle.Inflate(ClientRectangle, -5, -5), text, fill);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _timer?.Dispose();
+        base.Dispose(disposing);
     }
 }
 
@@ -414,6 +444,12 @@ internal sealed class ProgressLite : Control
     private bool _indeterminate;
     private float _marquee;
     private System.Windows.Forms.Timer? _timer;
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _timer?.Dispose();
+        base.Dispose(disposing);
+    }
 
     public ProgressLite()
     {

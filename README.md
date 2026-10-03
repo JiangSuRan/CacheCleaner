@@ -26,7 +26,7 @@ CacheCleaner 用一套**带安全语义的规则引擎**统一治理：87 条生
 
 | 能力 | 说明 |
 |---|---|
-| 🔍 **两阶段智能扫描** | 秒级扫描 70+ 内置规则位置，随后自动遍历用户目录发现未知应用的缓存（支持 `.cache` / `.tmp` / `.logs` 点目录），并按「目录是否存在」自动显隐 |
+| 🔍 **三阶段智能扫描** | 秒级扫描 70+ 内置规则位置，随后自动遍历用户目录发现未知应用的缓存（支持 `.cache` / `.tmp` / `.logs` 点目录），最后枚举项目工程的可再生产物，并按「目录是否存在」自动显隐 |
 | 🛡️ **三级安全防护** | 安全 / 注意 / 危险三级风险标注；路径安全校验 + 系统级精确白名单；`guardProcesses` 进程守卫——浏览器、微信运行中自动跳过对应缓存项并记入日志 |
 | 👁️ **预览模式** | 只统计将释放的量，不删除任何文件、不执行任何命令、不改动服务状态——先看账单，再动手 |
 | 📊 **效果可观测** | 清理汇总以**磁盘可用空间差**为准（拒绝纸面数字）；逐项释放量与失败明细（被占用/权限不足的具体路径）落盘审计日志 |
@@ -53,9 +53,9 @@ CacheCleaner 用一套**带安全语义的规则引擎**统一治理：87 条生
 
 1. 前往 [**Releases 页面**](https://github.com/JiangSuRan/CacheCleaner/releases) 下载最新版 `CacheCleaner.exe`
 2. 双击运行（启动时弹出 UAC 提权确认——清理系统目录与重启删除登记需要管理员权限）
-3. 点击 **「🔍 扫描缓存」**，按大小降序查看所有可清理项
-4. 不放心？勾选 **「预览模式（不删除）」** 再点清理，先看将释放多少
-5. 点击 **「🧹 清理选中」**——完成后弹窗展示磁盘可用空间的真实增量
+3. 点击 **「扫描缓存」**，按大小降序查看所有可清理项
+4. 不放心？勾选 **「预览模式」** 再点清理，先看将释放多少
+5. 点击 **「清理选中」**——完成后弹窗展示磁盘可用空间的真实增量
 
 > 被占用的文件会自动登记为**重启删除**，并在汇总中如实告知；被跳过的项目附失败原因。
 
@@ -127,17 +127,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 
 | 版本 | 主题 | 亮点 |
 |---|---|---|
-| v3.4 | 修复 | 命令式清理死代码复活（还原点/内存转储首次生效）、释放量真实化、DISM 超时保护 |
-| v3.5 | 覆盖面 | VSIX 扩展缓存、CBS 日志、pnpm、GPU 着色器、UWP 缓存族、Firefox/Brave/Vivaldi、AI 工具旧版本 |
-| v3.6 | 可观测 | 审计日志、可用空间差口径、📈 增长分析、遗留追踪会话检测 |
-| v3.7 | 通用性 | 系统盘符运行时推导、Conda 动态发现、多语言/locale 兼容 |
-| v3.8 | 架构 | JSON 规则引擎 + 逐规则进程守卫 |
-| v3.9 | 体验 | 预览模式、设置持久化、Docker/WSL 再生性清理 |
-| v4.0 | Agent 时代 | Agent dot-home 规则包、官方 prune 命令集成、模型仓库报告、迁盘顾问 |
-| v4.1 | Agent 目录 | 10 个 agent 收录清单（签名探测/置信分级/neverTouch）+ 未收录探测器 |
-| v4.2 | IDE 与内置 AI | JetBrains 系统缓存扫描器、C++ ipch/Copilot Chat 规则、Windsurf/ZCode 收录 |
+| v5.1 | 界面一体化改版 | 无边框窗口 + 自绘标题栏 + DWM 圆角，双层头部、三档按钮层级（动态主按钮）、圆角列表面板 + 状态标签、插画渐变背景、细圆角进度条、结构化状态区；修复构造期布局崩溃与按钮重绘遮挡 |
 | v5.0 | 项目工程清理 | 产物注册表 + 项目检测扫描器 + 陈旧度分级（源自 kondo/npkill 社区调研） |
 | v4.3 | 目录扩充 | DeepSeek Harness/Zed/Cline/Copilot CLI/Amp/Droid/CodeBuddy/pi 收录（全部源码级核实） |
+| v4.2 | IDE 与内置 AI | JetBrains 系统缓存扫描器、C++ ipch/Copilot Chat 规则、Windsurf/ZCode 收录 |
+| v4.1 | Agent 目录 | 10 个 agent 收录清单（签名探测/置信分级/neverTouch）+ 未收录探测器 |
+| v4.0 | Agent 时代 | Agent dot-home 规则包、官方 prune 命令集成、模型仓库报告、迁盘顾问 |
+| v3.9 | 体验 | 预览模式、设置持久化、Docker/WSL 再生性清理 |
+| v3.8 | 架构 | JSON 规则引擎 + 逐规则进程守卫 |
+| v3.7 | 通用性 | 系统盘符运行时推导、Conda 动态发现、多语言/locale 兼容 |
+| v3.6 | 可观测 | 审计日志、可用空间差口径、📈 增长分析、遗留追踪会话检测 |
+| v3.5 | 覆盖面 | VSIX 扩展缓存、CBS 日志、pnpm、GPU 着色器、UWP 缓存族、Firefox/Brave/Vivaldi、AI 工具旧版本 |
+| v3.4 | 修复 | 命令式清理死代码复活（还原点/内存转储首次生效）、释放量真实化、DISM 超时保护 |
 
 ## 🛠️ 技术栈与构建
 
@@ -161,12 +162,15 @@ ISCC setup.iss
 ├── CacheScanner.cs      # 扫描/清理核心（规则引擎消费端、进程守卫、命令式清理框架）
 ├── CleaningRules.cs     # JSON 规则加载器（内嵌默认 + 侧车覆盖 + 目录编译）
 ├── AgentCatalog.cs      # Agent 目录加载与编译器
+├── ProjectRegistry.cs   # 项目工件注册表加载
 ├── rules.default.json   # 内嵌声明式规则（71 条）
-├── agents.catalog.json  # Agent 收录目录（10 个 agent / 16 条编译条目）
+├── agents.catalog.json  # Agent 收录目录（18 个 agent / 31 条编译条目）
+├── projects.registry.json # 项目工件注册表（8 类项目 / 26 项可再生产物）
 ├── CleanLog.cs          # 清理审计日志
 ├── GrowthDialog.cs      # 增长分析页（含迁盘顾问）
 ├── AppSettings.cs       # 设置持久化
 ├── MainForm.cs          # 主界面
+├── Theme.cs             # 界面主题系统（色彩/字体/圆角面板/自绘按钮/进度条）
 ├── LICENSE              # MIT
 ├── cleanup/             # 增长基线监控脚本等辅助工具
 └── docs/                # 设计演进记录 + Agent 时代调研 + 目录分析
