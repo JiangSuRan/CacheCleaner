@@ -346,6 +346,9 @@ public static class CacheScanner
         // 未收录 agent/工具目录探测：家目录下的大体积 dot-dir 报告（看得见比清得掉更重要）
         ScanUnknownAgentHomes(items, ctx, progress, ref current, ref total, cancellationToken);
 
+        // 项目工程清理：node_modules/venv/target 等可再生产物（第三扫描阶段）
+        ScanProjectArtifacts(items, ctx, progress, ref current, ref total, cancellationToken);
+
         return items;
     }
 
@@ -524,6 +527,14 @@ public static class CacheScanner
         // 未收录工具目录：仅报告占用，语义确认前绝不清理
         if (item.Name.StartsWith("未收录工具目录"))
             return default;
+
+        // 项目工件：目录走清空，单文件走删除（注册表白名单内，可再生）
+        if (item.Name.StartsWith("[项目] "))
+        {
+            if (Directory.Exists(item.Path)) return CleanDirectory(item.Path, cancellationToken);
+            if (File.Exists(item.Path)) return CleanSingleFile(item.Path);
+            return default;
+        }
 
         // Docker/WSL：prune 与 vhdx 压缩均为官方再生性操作，取代旧的整删危险项
         if (item.Name == "Docker 未使用数据")
@@ -2514,6 +2525,126 @@ public static class CacheScanner
     {
         ".ssh", ".gnupg", ".dotnet", ".docker", ".kube", ".aws", ".config", ".git", ".azure"
     };
+
+    /// <summary>
+    /// 项目工程清理（第三扫描阶段）：按标记文件识别项目根（node/python/rust/dotnet/
+    /// maven/gradle/dart/php），枚举注册表中的可再生产物（node_modules/.venv/target/bin/obj...）。
+    /// 借鉴 kondo/npkill 的社区共识：命中项目根后不再向内部下钻（node_modules 内无项目根，
+    /// 且这是最大的性能收益）；陈旧度只用于分级提示，不自动删除（社区底线）。
+    /// </summary>
+    private static void ScanProjectArtifacts(
+        List<CacheItem> items,
+        ScanContext ctx,
+        IProgress<(int current, int total, string name)>? progress,
+        ref int current,
+        ref int total,
+        CancellationToken cancellationToken)
+    {
+        var types = ProjectRegistry.All;
+        if (types.Count == 0) return;
+
+        var found = new List<CacheItem>();
+        WalkProjects(ctx.UserProfile, 0, types, found, cancellationToken);
+
+        foreach (var item in found.OrderByDescending(i => i.SizeBytes).Take(MaxProjectItems))
+        {
+            total++;
+            current++;
+            progress?.Report((current, total, item.Name));
+            items.Add(item);
+        }
+    }
+
+    /// <summary>依赖/构建产物内部不再下钻（npkill GLOBAL_IGNORE 思路：这些目录里没有项目根）</summary>
+    private static readonly HashSet<string> PruneInsideNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "node_modules", ".git", ".venv", "venv", "__pycache__", "target", "vendor",
+        "Pods", "DerivedData", ".tox", ".nox", ".gradle", "site-packages"
+    };
+
+    private const int MaxProjectDepth = 7;
+    private const long MinArtifactSize = 50L * 1024 * 1024;
+    private const int MaxProjectItems = 60;
+    private static readonly TimeSpan ActiveWindow = TimeSpan.FromDays(90);
+
+    private static void WalkProjects(
+        string dir,
+        int depth,
+        IReadOnlyList<ProjectType> types,
+        List<CacheItem> found,
+        CancellationToken cancellationToken)
+    {
+        if (depth > MaxProjectDepth) return;
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string[] markerFiles;
+        try { markerFiles = Directory.GetFiles(dir); } catch { return; }
+
+        // 标记文件匹配（主标记 / 附加标记 / 后缀）
+        ProjectType? matched = null;
+        foreach (var t in types)
+        {
+            bool hit = markerFiles.Any(f =>
+                    string.Equals(Path.GetFileName(f), t.Marker, StringComparison.OrdinalIgnoreCase))
+                || t.Markers.Any(m => markerFiles.Any(f =>
+                    string.Equals(Path.GetFileName(f), m, StringComparison.OrdinalIgnoreCase)))
+                || t.MarkersSuffix.Any(sfx => markerFiles.Any(f =>
+                    Path.GetFileName(f).EndsWith(sfx, StringComparison.OrdinalIgnoreCase)));
+            if (hit) { matched = t; break; }
+        }
+
+        if (matched != null)
+        {
+            // 项目根：枚举产物，不再下钻
+            bool active = markerFiles.Any(f =>
+                string.Equals(Path.GetFileName(f), matched.Marker, StringComparison.OrdinalIgnoreCase)
+                && File.GetLastWriteTime(f) > DateTime.Now.Subtract(ActiveWindow));
+
+            foreach (var art in matched.Artifacts)
+            {
+                var artifactPath = Path.Combine(dir, art.Path);
+                if (art.File)
+                {
+                    var fi = new FileInfo(artifactPath);
+                    if (fi.Exists && fi.Length >= MinArtifactSize)
+                        found.Add(MakeArtifactItem(dir, matched, art, artifactPath, fi.Length, active));
+                }
+                else if (Directory.Exists(artifactPath))
+                {
+                    long size = SumFiles(artifactPath);
+                    if (size >= MinArtifactSize)
+                        found.Add(MakeArtifactItem(dir, matched, art, artifactPath, size, active));
+                }
+            }
+            return;
+        }
+
+        string[] subDirs;
+        try { subDirs = Directory.GetDirectories(dir); } catch { return; }
+        foreach (var sub in subDirs)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (PruneInsideNames.Contains(Path.GetFileName(sub))) continue;
+            if (IsReparsePoint(sub)) continue;
+            WalkProjects(sub, depth + 1, types, found, cancellationToken);
+        }
+    }
+
+    private static CacheItem MakeArtifactItem(
+        string projectDir, ProjectType type, ProjectArtifact art, string artifactPath, long size, bool active)
+    {
+        var regen = string.IsNullOrWhiteSpace(art.Regenerate) ? "" : $"，删除后可用「{art.Regenerate}」恢复";
+        var age = active ? "活跃项目（90 天内有改动）" : "陈旧项目（90 天未动）";
+        return new CacheItem
+        {
+            Name = $"[项目] {Path.GetFileName(projectDir)} {art.Path}",
+            Path = artifactPath,
+            Desc = $"{type.Id} 项目工件（{age}）{regen}",
+            Risk = active ? RiskLevel.Warn : RiskLevel.Safe,
+            Exists = true,
+            SizeBytes = size
+        };
+    }
 
     /// <summary>
     /// 通用命令执行（如 ipconfig /flushdns），返回是否成功退出

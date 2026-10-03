@@ -1,0 +1,82 @@
+{
+  "projectTypes": [
+    {
+      "id": "node",
+      "marker": "package.json",
+      "artifacts": [
+        { "path": "node_modules", "regenerate": "npm install" },
+        { "path": ".next", "regenerate": "npm run build" },
+        { "path": ".nuxt", "regenerate": "npm run dev" },
+        { "path": ".svelte-kit", "regenerate": "npm run dev" },
+        { "path": ".turbo", "regenerate": "构建缓存，自动重建" },
+        { "path": ".parcel-cache", "regenerate": "构建缓存，自动重建" },
+        { "path": ".angular", "regenerate": "ng build" },
+        { "path": "coverage", "regenerate": "npm run test:coverage" },
+        { "path": ".eslintcache", "regenerate": "下次 lint 自动重建", "file": true }
+      ]
+    },
+    {
+      "id": "python",
+      "marker": "pyproject.toml",
+      "markers": ["setup.py", "requirements.txt", "Pipfile"],
+      "artifacts": [
+        { "path": ".venv", "regenerate": "python -m venv .venv && pip install -r requirements.txt" },
+        { "path": "venv", "regenerate": "python -m venv venv && pip install -r requirements.txt" },
+        { "path": "__pycache__", "regenerate": "运行时自动生成", "recursive": false },
+        { "path": ".pytest_cache", "regenerate": "pytest 自动生成" },
+        { "path": ".mypy_cache", "regenerate": "mypy 自动生成" },
+        { "path": ".ruff_cache", "regenerate": "ruff 自动生成" },
+        { "path": ".tox", "regenerate": "tox 重建" },
+        { "path": ".nox", "regenerate": "nox 重建" }
+      ]
+    },
+    {
+      "id": "rust",
+      "marker": "Cargo.toml",
+      "artifacts": [
+        { "path": "target", "regenerate": "cargo build" },
+        { "path": ".xwin-cache", "regenerate": "cargo 自动生成" }
+      ]
+    },
+    {
+      "id": "dotnet",
+      "marker": ".csproj",
+      "markersSuffix": [".sln"],
+      "artifacts": [
+        { "path": "bin", "regenerate": "dotnet build" },
+        { "path": "obj", "regenerate": "dotnet build" }
+      ]
+    },
+    {
+      "id": "maven",
+      "marker": "pom.xml",
+      "artifacts": [
+        { "path": "target", "regenerate": "mvn package" }
+      ]
+    },
+    {
+      "id": "gradle",
+      "marker": "build.gradle",
+      "markersSuffix": [".gradle.kts"],
+      "artifacts": [
+        { "path": "build", "regenerate": "gradle build" },
+        { "path": ".gradle", "regenerate": "gradle wrapper 自动生成" }
+      ]
+    },
+    {
+      "id": "dart",
+      "marker": "pubspec.yaml",
+      "artifacts": [
+        { "path": "build", "regenerate": "flutter build / dart compile" },
+        { "path": ".dart_tool", "regenerate": "pub get" }
+      ]
+    },
+    {
+      "id": "php",
+      "marker": "composer.json",
+      "artifacts": [
+        { "path": "vendor", "regenerate": "composer install" }
+      ]
+    }
+  ]
+}

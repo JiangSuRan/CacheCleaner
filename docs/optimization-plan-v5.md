@@ -1,5 +1,7 @@
 # v5.0 优化方案：项目工程清理引擎（重新设计）
 
+> ✅ 状态：v5.0-a 已实施（2026-09-26，随 v5.0 发布）：`projects.registry.json`（8 类项目/26 项产物与再生成命令）+ `ProjectRegistry.cs` + `ScanProjectArtifacts` 第三扫描阶段（标记检测/剪枝下钻/陈旧度分级/体积门槛 50MB/上限 60 条）。glob 型散文件产物（v5.0-b）与多开发盘（v5.0-c）待做。
+
 > 日期：2026-09-26 · 依据：开源社区专项调研（kondo/npkill/bunkill/pyclean/czkawka 源码级分析，26 次查询）+ 自我根因分析
 > 结论先行：**清理能力不行的根因不是规则不够多，而是刻意跳过了占用最大的一类东西——项目工程工件（node_modules / venv / target / build / obj）**。v5.0 以「项目工程清理引擎」为核心重设计，这是 npkill 9.4k 星验证过的第一大开发者痛点。
 

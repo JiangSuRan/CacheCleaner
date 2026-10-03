@@ -37,6 +37,7 @@ CacheCleaner 用一套**带安全语义的规则引擎**统一治理：87 条生
 | 🖥️ **系统级瘦身** | 回收站、系统还原点（缩减上限保留最新）、WinSxS 组件存储（DISM）、Windows 升级残留（cleanmgr /autoclean）、Windows 更新缓存（自动停启服务） |
 | 🐳 **Docker/WSL 再生性清理** | `docker system prune` 按 df 差值计释放；vhdx 虚拟磁盘 `diskpart compact` 离线压缩——只回收空白，不碰数据 |
 | 🏢 **IDE 与内置 AI** | JetBrains 全家桶系统缓存（多产品多版本）、VS Code C++ ipch 缓存、Copilot Chat 会话数据（只读报告）、Windsurf/ZCode 等桌面客户端 |
+| 🧱 **项目工程清理** | 标记文件识别项目根（Node/Python/Rust/.NET/Maven/Gradle/Dart/PHP），枚举 node_modules/.venv/target/bin/obj 等可再生产物，按大小排序、90 天陈旧度分级，Desc 注明**再生成命令**——npkill/kondo 验证的第一大痛点 |
 | 🌍 **通用性** | 系统盘符运行时推导（Windows 不在 C 盘同样可用）；中英文系统输出与小数逗号 locale 兼容；Conda 安装位置动态发现 |
 
 ## 🧭 设计原则
@@ -135,6 +136,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 | v4.0 | Agent 时代 | Agent dot-home 规则包、官方 prune 命令集成、模型仓库报告、迁盘顾问 |
 | v4.1 | Agent 目录 | 10 个 agent 收录清单（签名探测/置信分级/neverTouch）+ 未收录探测器 |
 | v4.2 | IDE 与内置 AI | JetBrains 系统缓存扫描器、C++ ipch/Copilot Chat 规则、Windsurf/ZCode 收录 |
+| v5.0 | 项目工程清理 | 产物注册表 + 项目检测扫描器 + 陈旧度分级（源自 kondo/npkill 社区调研） |
 | v4.3 | 目录扩充 | DeepSeek Harness/Zed/Cline/Copilot CLI/Amp/Droid/CodeBuddy/pi 收录（全部源码级核实） |
 
 ## 🛠️ 技术栈与构建
