@@ -1,3 +1,4 @@
+param([string]$Executable = 'publish\CacheCleaner.exe', [switch]$NoScreenshots)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing, System.Windows.Forms
 Add-Type -TypeDefinition @'
@@ -10,7 +11,7 @@ public static class SmokeWindow {
 }
 '@
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$exe = Join-Path $workspace 'publish\CacheCleaner.exe'
+$exe = if ([IO.Path]::IsPathRooted($Executable)) { $Executable } else { Join-Path $workspace $Executable }
 $oldCursor = [System.Windows.Forms.Cursor]::Position
 $process = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
 try {
@@ -40,6 +41,7 @@ try {
     function Save-Screenshot($name) {
         [SmokeWindow]::SetWindowPos([IntPtr]$root.Current.NativeWindowHandle,[IntPtr](-1),0,0,0,0,0x43) | Out-Null
         $root.SetFocus(); Start-Sleep -Milliseconds 300
+        if ($NoScreenshots) { return }
         $rect=$root.Current.BoundingRectangle
         $bitmap=[System.Drawing.Bitmap]::new([int]$rect.Width,[int]$rect.Height)
         $graphics=[System.Drawing.Graphics]::FromImage($bitmap)

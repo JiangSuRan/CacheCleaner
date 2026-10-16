@@ -8,6 +8,7 @@ internal static class CommandRunner
     internal static (bool Ok, string Output) Run(string fileName, string arguments, int timeoutMs,
         CancellationToken token = default, IProgress<string>? progress = null)
     {
+        using var metric = ScanDiagnostics.Command();
         token.ThrowIfCancellationRequested();
         var process = new Process { StartInfo = new ProcessStartInfo(fileName, arguments)
         {

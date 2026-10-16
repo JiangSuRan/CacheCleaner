@@ -96,6 +96,7 @@ class Regression
             CacheScanner.DryRun = false;
             var report = new CacheItem { Name="未收录工具目录 (fixture)", Path=retained, Exists=true, SizeBytes=6 };
             Assert(!CacheScanner.CanClean(report) && CacheScanner.CleanItem(report).SkippedCount == 1 && File.Exists(readOnly),"只读报告不可清理且明确跳过");
+            TestProjectMarkers(fixtures);
             Console.WriteLine("REGRESSION_OK"); return 0;
         }
         finally
@@ -104,6 +105,29 @@ class Regression
             foreach(var file in Directory.EnumerateFiles(fixtures,"*",SearchOption.AllDirectories)) File.SetAttributes(file,FileAttributes.Normal);
             Directory.Delete(fixtures,true);
         }
+    }
+    static void TestProjectMarkers(string fixtures)
+    {
+        string root=Directory.CreateDirectory(Path.Combine(fixtures,"projects")).FullName;
+        void Artifact(string project,string name)
+        {
+            var directory=Directory.CreateDirectory(Path.Combine(root,project,name)).FullName;
+            using var stream=File.Create(Path.Combine(directory,"data"));
+            stream.SetLength(50L*1024*1024);
+        }
+        Artifact("node","node_modules"); Artifact("node",".venv");
+        File.WriteAllText(Path.Combine(root,"node","PACKAGE.JSON"),"{}");
+        File.WriteAllText(Path.Combine(root,"node","pyproject.toml"),"");
+        Artifact("python",".venv");
+        File.WriteAllText(Path.Combine(root,"python","requirements.txt"),"");
+        Artifact("dotnet","bin");
+        File.WriteAllText(Path.Combine(root,"dotnet","solution.SLN"),"");
+        var types=typeof(CacheScanner).Assembly.GetType("CacheCleaner.ProjectRegistry")!.GetProperty("All",BindingFlags.Public|BindingFlags.Static)!.GetValue(null)!;
+        var found=new List<CacheItem>();
+        Invoke("CacheScanner","WalkProjects",root,0,types,found,CancellationToken.None);
+        Assert(found.Count==3,"项目匹配保持类型优先级、附加标记和后缀规则");
+        Assert(found.Single(item=>item.Path==Path.Combine(root,"node","node_modules")).Risk==RiskLevel.Warn,"主标记大小写匹配与活跃项目分级保持一致");
+        Assert(found.Single(item=>item.Path==Path.Combine(root,"python",".venv")).Risk==RiskLevel.Safe,"附加标记沿用现有活跃度判断");
     }
     static int TestUi()
     {

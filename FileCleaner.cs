@@ -22,10 +22,10 @@ internal static class FileCleaner
             try
             {
                 if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) { complete = false; continue; }
-                foreach (var file in Directory.EnumerateFiles(directory))
+                foreach (var file in new DirectoryInfo(directory).EnumerateFiles())
                 {
                     token.ThrowIfCancellationRequested();
-                    try { bytes += new FileInfo(file).Length; }
+                    try { bytes += file.Length; }
                     catch (IOException) { complete = false; }
                     catch (UnauthorizedAccessException) { complete = false; }
                 }
@@ -68,12 +68,14 @@ internal static class FileCleaner
                 if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
                 { CleanLog.NoteFailure($"保留目录链接: {directory}"); continue; }
                 visited.Add(directory);
-                foreach (var file in Directory.EnumerateFiles(directory, pattern))
+                foreach (var info in new DirectoryInfo(directory).EnumerateFiles(pattern))
                 {
                     CheckCancellation();
+                    var file = info.FullName;
                     try
                     {
-                        var info = new FileInfo(file);
+                        // 只读预览复用枚举元数据；删除或判断保留期前刷新，避免误删新文件。
+                        if (!CacheScanner.DryRun || cutoff.HasValue) info.Refresh();
                         if ((info.Attributes & FileAttributes.ReparsePoint) != 0) continue;
                         if (cutoff.HasValue && info.LastWriteTime >= cutoff.Value) continue;
                         long size = info.Length;

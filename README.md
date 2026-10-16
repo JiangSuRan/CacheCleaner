@@ -135,6 +135,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 ## 🏗️ 工程品质
 
 - 🧪 **回归测试套件** — [`tests/Regression`](tests/Regression/) 零框架依赖：覆盖双管道大量输出、超时与取消、预览零删除、真实删除、最近文件保留、失败后继续、残留大小计量、只读条目 UI 行为；真实删除仅作用于测试自建的随机目录，退出即清理
+- ⏱️ **性能对照** — [C# 优化与 Rust 只读原型实测](docs/performance/2026-10-15/README.md)：完整扫描中位耗时 10.89s → 6.69s（约 −38.6%），剩余量统计 126ms → 15ms；报告含阶段耗时、原始样本与可复测工具
 - 📦 **自包含单文件** — 一个 exe 内嵌 .NET 10 运行时与全部规则资产，拷贝即用，无需安装任何依赖
 - ✅ **零警告编译** — Release 构建 0 错误 / 0 警告
 - ♿ **无障碍友好** — 全自绘按钮保留 PushButton 无障碍角色、屏幕阅读器名称与 Tab/Space/Enter 键盘操作
@@ -179,10 +180,12 @@ ISCC setup.iss
 ├── AppSettings.cs         # 设置持久化
 ├── MainForm.cs            # 主界面
 ├── Theme.cs               # 界面主题系统（色彩/字体/圆角面板/自绘按钮/进度条）
+├── ScanDiagnostics.cs     # 扫描阶段耗时诊断（阶段计时、重复查询统计）
 ├── LICENSE                # MIT
 ├── cleanup/               # 增长基线监控脚本等辅助工具
 ├── tests/Regression/      # 清理流程回归测试（零框架依赖）
-└── docs/                  # 设计演进记录 + Agent 时代调研 + 目录分析
+├── tests/Performance/     # 性能对照复测工具（固定夹具 + Rust 原型对照）
+└── docs/                  # 设计演进记录 + Agent 时代调研 + 目录分析 + 性能评估
 ```
 
 ---
@@ -324,6 +327,7 @@ Issues contributing evidence for new agents (with official docs or source links)
 ## 🏗️ Engineering Quality
 
 - 🧪 **Regression suite** — [`tests/Regression`](tests/Regression/) with zero framework dependencies: parallel pipes under heavy output, timeout, cancellation, preview deleting nothing, real deletion, recent-file retention, continue-on-failure, leftover-size accounting and read-only UI behavior; real deletion only targets random directories the suite creates itself
+- ⏱️ **Performance comparison** — [C# optimizations vs. a read-only Rust prototype](docs/performance/2026-10-15/README.md): full-scan median 10.89s → 6.69s (≈ −38.6%), leftover measurement 126ms → 15ms; stage timings, raw samples and reproducible tools included
 - 📦 **Self-contained single file** — one exe embeds the .NET 10 runtime and all rule assets; copy and run
 - ✅ **Zero-warning builds** — Release builds with 0 errors / 0 warnings
 - ♿ **Accessibility** — fully custom-drawn buttons keep the PushButton role, screen-reader names and Tab/Space/Enter operation

@@ -175,6 +175,7 @@ public static class CacheScanner
         int total = CleaningRules.All.Count + condaCandidates.Count;
         int current = 0;
 
+        ScanDiagnostics.NextStage("KnownRules");
         foreach (var rule in CleaningRules.All)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -305,51 +306,67 @@ public static class CacheScanner
         }
 
         // Conda pkgs 单独扫描（动态发现安装位置）
+        ScanDiagnostics.NextStage("ScanCondaPkgs");
         ScanCondaPkgs(items, condaCandidates, progress, ref current, ref total, cancellationToken);
 
         // Electron 应用更新缓存
+        ScanDiagnostics.NextStage("ScanUpdaterCaches");
         ScanUpdaterCaches(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // GitHub Desktop 旧版本
+        ScanDiagnostics.NextStage("ScanGithubDesktopOldVersions");
         ScanGithubDesktopOldVersions(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // 微信4.0 缓存（xwechat_files\wxid_*\cache，动态多用户路径）
+        ScanDiagnostics.NextStage("ScanWeChatCache");
         ScanWeChatCache(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // Adobe 全家桶自动恢复快照（* Settings\*\DataRecovery，AI 重度用户可达数 GB）
+        ScanDiagnostics.NextStage("ScanAdobeRecoveryCaches");
         ScanAdobeRecoveryCaches(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // 浏览器多 Profile 缓存（Edge/Chrome 除 Default 外的 Profile N，多账号场景的常见盲区）
+        ScanDiagnostics.NextStage("ScanBrowserProfileCaches");
         ScanBrowserProfileCaches(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // 豆包缓存（仅 cache 类子目录，替代旧的整目录删除，保住登录态和 IndexedDB）
+        ScanDiagnostics.NextStage("ScanDoubaoCaches");
         ScanDoubaoCaches(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // Electron 系应用缓存子目录统一扫描（Cache/CachedData/Code Cache/GPUCache/扩展包缓存等）
+        ScanDiagnostics.NextStage("ScanElectronApps");
         ScanElectronApps(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // Firefox 各 Profile 磁盘缓存
+        ScanDiagnostics.NextStage("ScanFirefoxCaches");
         ScanFirefoxCaches(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // UWP 应用包安全缓存族（AC\INetCache / AC\Temp / TempState）
+        ScanDiagnostics.NextStage("ScanUwpCacheFamilies");
         ScanUwpCacheFamilies(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // JetBrains 全家桶系统缓存（多产品多版本）
+        ScanDiagnostics.NextStage("ScanJetBrains");
         ScanJetBrains(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // AI CLI 自更新遗留的旧版本目录（保留最新）
+        ScanDiagnostics.NextStage("ScanCodexOldVersions");
         ScanCodexOldVersions(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // 遗留性能追踪会话（WPR 录制/手动内核追踪），持续写盘的经典增长源
+        ScanDiagnostics.NextStage("ScanLeftoverTraces");
         ScanLeftoverTraces(items, progress, ref current, ref total, cancellationToken);
 
         // Docker/WSL：prune 可回收量 + vhdx 虚拟磁盘压缩（取代旧整删危险项）
+        ScanDiagnostics.NextStage("ScanDockerWsl");
         ScanDockerWsl(items, progress, ref current, ref total, cancellationToken);
 
         // 未收录 agent/工具目录探测：家目录下的大体积 dot-dir 报告（看得见比清得掉更重要）
+        ScanDiagnostics.NextStage("ScanUnknownAgentHomes");
         ScanUnknownAgentHomes(items, ctx, progress, ref current, ref total, cancellationToken);
 
         // 项目工程清理：node_modules/venv/target 等可再生产物（第三扫描阶段）
+        ScanDiagnostics.NextStage("ScanProjectArtifacts");
         ScanProjectArtifacts(items, ctx, progress, ref current, ref total, cancellationToken);
 
         return items;
@@ -476,6 +493,7 @@ public static class CacheScanner
     /// </summary>
     public static long SumFiles(string path, string pattern = "*", SearchOption searchOption = SearchOption.AllDirectories)
     {
+        using var metric = ScanDiagnostics.SizeQuery(path, pattern, searchOption);
         if (!Directory.Exists(path)) return 0;
         try
         {
@@ -1693,6 +1711,7 @@ public static class CacheScanner
         IProgress<(int dirsScanned, string currentPath)>? progress = null,
         CancellationToken ct = default)
     {
+        ScanDiagnostics.NextStage("AutoDiscovery");
         var knownPaths = BuildKnownPathsSet(knownItems);
         var results = new List<CacheItem>();
         int dirsScanned = 0;
@@ -1751,10 +1770,10 @@ public static class CacheScanner
         if (!path.StartsWith(SysRoot, StringComparison.OrdinalIgnoreCase))
             return;
 
-        string[] subDirs;
+        DirectoryInfo[] subDirs;
         try
         {
-            subDirs = Directory.GetDirectories(path);
+            subDirs = new DirectoryInfo(path).GetDirectories();
         }
         catch (UnauthorizedAccessException) { return; }
         catch (OperationCanceledException) { throw; }
@@ -1764,18 +1783,19 @@ public static class CacheScanner
             return;
         }
 
-        foreach (var dir in subDirs)
+        foreach (var directory in subDirs)
         {
             ct.ThrowIfCancellationRequested();
             dirsScanned++;
 
-            var dirName = Path.GetFileName(dir);
+            var dir = directory.FullName;
+            var dirName = directory.Name;
 
             // 跳过黑名单目录
             if (SkipDirNames.Contains(dirName)) continue;
 
             // 跳过 junction point / symlink（防止跨盘跟随符号链接）
-            if (IsReparsePoint(dir))
+            if ((directory.Attributes & FileAttributes.ReparsePoint) != 0)
             {
                 Debug.WriteLine($"跳过符号链接: {dir}");
                 continue;
@@ -2342,19 +2362,19 @@ public static class CacheScanner
         if (depth > MaxProjectDepth) return;
         cancellationToken.ThrowIfCancellationRequested();
 
-        string[] markerFiles;
-        try { markerFiles = Directory.GetFiles(dir); } catch { return; }
+        FileInfo[] markerFiles;
+        var directoryInfo = new DirectoryInfo(dir);
+        try { markerFiles = directoryInfo.GetFiles(); } catch { return; }
+        var markerNames = markerFiles.Select(file => file.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // 标记文件匹配（主标记 / 附加标记 / 后缀）
         ProjectType? matched = null;
         foreach (var t in types)
         {
-            bool hit = markerFiles.Any(f =>
-                    string.Equals(Path.GetFileName(f), t.Marker, StringComparison.OrdinalIgnoreCase))
-                || t.Markers.Any(m => markerFiles.Any(f =>
-                    string.Equals(Path.GetFileName(f), m, StringComparison.OrdinalIgnoreCase)))
-                || t.MarkersSuffix.Any(sfx => markerFiles.Any(f =>
-                    Path.GetFileName(f).EndsWith(sfx, StringComparison.OrdinalIgnoreCase)));
+            bool hit = markerNames.Contains(t.Marker)
+                || t.Markers.Any(markerNames.Contains)
+                || t.MarkersSuffix.Any(sfx => markerNames.Any(name =>
+                    name.EndsWith(sfx, StringComparison.OrdinalIgnoreCase)));
             if (hit) { matched = t; break; }
         }
 
@@ -2362,8 +2382,8 @@ public static class CacheScanner
         {
             // 项目根：枚举产物，不再下钻
             bool active = markerFiles.Any(f =>
-                string.Equals(Path.GetFileName(f), matched.Marker, StringComparison.OrdinalIgnoreCase)
-                && File.GetLastWriteTime(f) > DateTime.Now.Subtract(ActiveWindow));
+                string.Equals(f.Name, matched.Marker, StringComparison.OrdinalIgnoreCase)
+                && f.LastWriteTime > DateTime.Now.Subtract(ActiveWindow));
 
             foreach (var art in matched.Artifacts)
             {
@@ -2384,14 +2404,14 @@ public static class CacheScanner
             return;
         }
 
-        string[] subDirs;
-        try { subDirs = Directory.GetDirectories(dir); } catch { return; }
+        DirectoryInfo[] subDirs;
+        try { subDirs = directoryInfo.GetDirectories(); } catch { return; }
         foreach (var sub in subDirs)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (PruneInsideNames.Contains(Path.GetFileName(sub))) continue;
-            if (IsReparsePoint(sub)) continue;
-            WalkProjects(sub, depth + 1, types, found, cancellationToken);
+            if (PruneInsideNames.Contains(sub.Name)) continue;
+            if ((sub.Attributes & FileAttributes.ReparsePoint) != 0) continue;
+            WalkProjects(sub.FullName, depth + 1, types, found, cancellationToken);
         }
     }
 

@@ -1,0 +1,184 @@
+{
+  "Kind": "live-read-only",
+  "Environment": {
+    "Os": "Microsoft Windows NT 10.0.26300.0",
+    "Runtime": "10.0.8",
+    "LogicalCpus": 16,
+    "AppVersion": "5.1.1.0",
+    "Utc": "2026-10-15T14:13:10.8012201Z"
+  },
+  "Measurement": {
+    "Name": "CompleteScan",
+    "WallMs": 6552.311,
+    "CpuMs": 4890.625,
+    "AllocatedBytes": 237837640,
+    "GcCollections": [
+      25,
+      1,
+      0
+    ],
+    "PeakWorkingSetBytes": 59342848,
+    "Result": {
+      "KnownCount": 135,
+      "AutoCount": 12,
+      "IdentityHash": "07766720105B233E718456543AD5B77AA007B8B9ACEEDAE775065B3EB855EFC5"
+    }
+  },
+  "Diagnostics": {
+    "Stages": [
+      {
+        "Name": "Other",
+        "ElapsedMs": 1122.792,
+        "SizeQueries": 0,
+        "SizeMs": 0,
+        "Commands": 1,
+        "CommandMs": 1062.4137
+      },
+      {
+        "Name": "KnownRules",
+        "ElapsedMs": 831.6695,
+        "SizeQueries": 70,
+        "SizeMs": 411.2505,
+        "Commands": 2,
+        "CommandMs": 407.2573
+      },
+      {
+        "Name": "ScanCondaPkgs",
+        "ElapsedMs": 11.1479,
+        "SizeQueries": 1,
+        "SizeMs": 10.8171,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanUpdaterCaches",
+        "ElapsedMs": 1.6333,
+        "SizeQueries": 12,
+        "SizeMs": 0.726,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanGithubDesktopOldVersions",
+        "ElapsedMs": 0.7788,
+        "SizeQueries": 0,
+        "SizeMs": 0,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanWeChatCache",
+        "ElapsedMs": 0.5132,
+        "SizeQueries": 2,
+        "SizeMs": 0.1004,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanAdobeRecoveryCaches",
+        "ElapsedMs": 0.5316,
+        "SizeQueries": 1,
+        "SizeMs": 0.0542,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanBrowserProfileCaches",
+        "ElapsedMs": 0.7328,
+        "SizeQueries": 0,
+        "SizeMs": 0,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanDoubaoCaches",
+        "ElapsedMs": 10.0213,
+        "SizeQueries": 14,
+        "SizeMs": 7.8392,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanElectronApps",
+        "ElapsedMs": 4.6816,
+        "SizeQueries": 52,
+        "SizeMs": 3.872,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanFirefoxCaches",
+        "ElapsedMs": 0.3786,
+        "SizeQueries": 0,
+        "SizeMs": 0,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanUwpCacheFamilies",
+        "ElapsedMs": 43.6039,
+        "SizeQueries": 418,
+        "SizeMs": 26.697100000000006,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanJetBrains",
+        "ElapsedMs": 0.4371,
+        "SizeQueries": 0,
+        "SizeMs": 0,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanCodexOldVersions",
+        "ElapsedMs": 5.4825,
+        "SizeQueries": 1,
+        "SizeMs": 0.1548,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanLeftoverTraces",
+        "ElapsedMs": 642.1866,
+        "SizeQueries": 0,
+        "SizeMs": 0,
+        "Commands": 1,
+        "CommandMs": 631.2363
+      },
+      {
+        "Name": "ScanDockerWsl",
+        "ElapsedMs": 142.2383,
+        "SizeQueries": 0,
+        "SizeMs": 0,
+        "Commands": 1,
+        "CommandMs": 2.6404
+      },
+      {
+        "Name": "ScanUnknownAgentHomes",
+        "ElapsedMs": 395.0769,
+        "SizeQueries": 35,
+        "SizeMs": 391.2493,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "ScanProjectArtifacts",
+        "ElapsedMs": 2178.8316,
+        "SizeQueries": 22,
+        "SizeMs": 317.00859999999994,
+        "Commands": 0,
+        "CommandMs": 0
+      },
+      {
+        "Name": "AutoDiscovery",
+        "ElapsedMs": 1168.0399,
+        "SizeQueries": 669,
+        "SizeMs": 206.16119999999995,
+        "Commands": 0,
+        "CommandMs": 0
+      }
+    ],
+    "RepeatedSizeQueries": 22
+  }
+}

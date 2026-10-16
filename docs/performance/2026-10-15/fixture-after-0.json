@@ -1,0 +1,467 @@
+{
+  "Kind": "fixture",
+  "Environment": {
+    "Os": "Microsoft Windows NT 10.0.26300.0",
+    "Runtime": "10.0.8",
+    "LogicalCpus": 16,
+    "AppVersion": "5.1.1.0",
+    "Utc": "2026-10-15T14:12:56.4532391Z"
+  },
+  "Measurements": [
+    {
+      "Name": "Measure",
+      "WallMs": 16.3391,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8575432,
+      "GcCollections": [
+        1,
+        1,
+        0
+      ],
+      "PeakWorkingSetBytes": 40259584,
+      "Result": {
+        "Bytes": 49922048,
+        "Complete": true
+      }
+    },
+    {
+      "Name": "SumFiles",
+      "WallMs": 9.5652,
+      "CpuMs": 0,
+      "AllocatedBytes": 8483800,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 40316928,
+      "Result": 49922048
+    },
+    {
+      "Name": "Preview",
+      "WallMs": 48.2394,
+      "CpuMs": 46.875,
+      "AllocatedBytes": 8590072,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 45105152,
+      "Result": {
+        "FreedBytes": 49922048,
+        "DeletedCount": 24576,
+        "LockedCount": 0,
+        "PermissionDeniedCount": 0,
+        "OtherFailureCount": 0,
+        "PendingRebootCount": 0,
+        "TotalFailures": 0,
+        "SkippedCount": 0,
+        "Detail": null
+      }
+    },
+    {
+      "Name": "Projects",
+      "WallMs": 56.5801,
+      "CpuMs": 62.5,
+      "AllocatedBytes": 10644576,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 48762880,
+      "Result": []
+    },
+    {
+      "Name": "Projects",
+      "WallMs": 23.6583,
+      "CpuMs": 31.25,
+      "AllocatedBytes": 10425048,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 48824320,
+      "Result": []
+    },
+    {
+      "Name": "Preview",
+      "WallMs": 14.5858,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8581656,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 48832512,
+      "Result": {
+        "FreedBytes": 49922048,
+        "DeletedCount": 24576,
+        "LockedCount": 0,
+        "PermissionDeniedCount": 0,
+        "OtherFailureCount": 0,
+        "PendingRebootCount": 0,
+        "TotalFailures": 0,
+        "SkippedCount": 0,
+        "Detail": null
+      }
+    },
+    {
+      "Name": "SumFiles",
+      "WallMs": 8.5673,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8485272,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 48898048,
+      "Result": 49922048
+    },
+    {
+      "Name": "Measure",
+      "WallMs": 13.9352,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8576568,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 48898048,
+      "Result": {
+        "Bytes": 49922048,
+        "Complete": true
+      }
+    },
+    {
+      "Name": "Measure",
+      "WallMs": 14.4155,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8574512,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 48967680,
+      "Result": {
+        "Bytes": 49922048,
+        "Complete": true
+      }
+    },
+    {
+      "Name": "SumFiles",
+      "WallMs": 8.713,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8482928,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 48967680,
+      "Result": 49922048
+    },
+    {
+      "Name": "Preview",
+      "WallMs": 16.3561,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8577984,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 49029120,
+      "Result": {
+        "FreedBytes": 49922048,
+        "DeletedCount": 24576,
+        "LockedCount": 0,
+        "PermissionDeniedCount": 0,
+        "OtherFailureCount": 0,
+        "PendingRebootCount": 0,
+        "TotalFailures": 0,
+        "SkippedCount": 0,
+        "Detail": null
+      }
+    },
+    {
+      "Name": "Projects",
+      "WallMs": 18.6906,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 10420912,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 49029120,
+      "Result": []
+    },
+    {
+      "Name": "Projects",
+      "WallMs": 17.2482,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 10420912,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 49160192,
+      "Result": []
+    },
+    {
+      "Name": "Preview",
+      "WallMs": 20.7785,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8577984,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 49160192,
+      "Result": {
+        "FreedBytes": 49922048,
+        "DeletedCount": 24576,
+        "LockedCount": 0,
+        "PermissionDeniedCount": 0,
+        "OtherFailureCount": 0,
+        "PendingRebootCount": 0,
+        "TotalFailures": 0,
+        "SkippedCount": 0,
+        "Detail": null
+      }
+    },
+    {
+      "Name": "SumFiles",
+      "WallMs": 14.0345,
+      "CpuMs": 31.25,
+      "AllocatedBytes": 8482928,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 49455104,
+      "Result": 49922048
+    },
+    {
+      "Name": "Measure",
+      "WallMs": 27.835,
+      "CpuMs": 62.5,
+      "AllocatedBytes": 8574512,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50003968,
+      "Result": {
+        "Bytes": 49922048,
+        "Complete": true
+      }
+    },
+    {
+      "Name": "Measure",
+      "WallMs": 25.8574,
+      "CpuMs": 62.5,
+      "AllocatedBytes": 8574512,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50003968,
+      "Result": {
+        "Bytes": 49922048,
+        "Complete": true
+      }
+    },
+    {
+      "Name": "SumFiles",
+      "WallMs": 9.5815,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8482928,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50003968,
+      "Result": 49922048
+    },
+    {
+      "Name": "Preview",
+      "WallMs": 14.736,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8577984,
+      "GcCollections": [
+        0,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50003968,
+      "Result": {
+        "FreedBytes": 49922048,
+        "DeletedCount": 24576,
+        "LockedCount": 0,
+        "PermissionDeniedCount": 0,
+        "OtherFailureCount": 0,
+        "PendingRebootCount": 0,
+        "TotalFailures": 0,
+        "SkippedCount": 0,
+        "Detail": null
+      }
+    },
+    {
+      "Name": "Projects",
+      "WallMs": 18.8666,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 10420912,
+      "GcCollections": [
+        2,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50012160,
+      "Result": []
+    },
+    {
+      "Name": "Projects",
+      "WallMs": 13.7654,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 10420912,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50012160,
+      "Result": []
+    },
+    {
+      "Name": "Preview",
+      "WallMs": 13.6231,
+      "CpuMs": 0,
+      "AllocatedBytes": 8577984,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50028544,
+      "Result": {
+        "FreedBytes": 49922048,
+        "DeletedCount": 24576,
+        "LockedCount": 0,
+        "PermissionDeniedCount": 0,
+        "OtherFailureCount": 0,
+        "PendingRebootCount": 0,
+        "TotalFailures": 0,
+        "SkippedCount": 0,
+        "Detail": null
+      }
+    },
+    {
+      "Name": "SumFiles",
+      "WallMs": 9.3529,
+      "CpuMs": 0,
+      "AllocatedBytes": 8482928,
+      "GcCollections": [
+        0,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50028544,
+      "Result": 49922048
+    },
+    {
+      "Name": "Measure",
+      "WallMs": 15.2501,
+      "CpuMs": 0,
+      "AllocatedBytes": 8574512,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50028544,
+      "Result": {
+        "Bytes": 49922048,
+        "Complete": true
+      }
+    },
+    {
+      "Name": "Measure",
+      "WallMs": 13.7916,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8574512,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50028544,
+      "Result": {
+        "Bytes": 49922048,
+        "Complete": true
+      }
+    },
+    {
+      "Name": "SumFiles",
+      "WallMs": 8.0618,
+      "CpuMs": 0,
+      "AllocatedBytes": 8482928,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50028544,
+      "Result": 49922048
+    },
+    {
+      "Name": "Preview",
+      "WallMs": 16.3752,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 8577984,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50028544,
+      "Result": {
+        "FreedBytes": 49922048,
+        "DeletedCount": 24576,
+        "LockedCount": 0,
+        "PermissionDeniedCount": 0,
+        "OtherFailureCount": 0,
+        "PendingRebootCount": 0,
+        "TotalFailures": 0,
+        "SkippedCount": 0,
+        "Detail": null
+      }
+    },
+    {
+      "Name": "Projects",
+      "WallMs": 17.7839,
+      "CpuMs": 15.625,
+      "AllocatedBytes": 10420912,
+      "GcCollections": [
+        1,
+        0,
+        0
+      ],
+      "PeakWorkingSetBytes": 50032640,
+      "Result": []
+    }
+  ]
+}

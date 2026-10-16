@@ -19,3 +19,6 @@ Desktop.ini
 
 ## 会话临时目录（中间文件，不入库）
 _tmp/
+.toolchains/
+tests/Performance/rust-scan/target/
+publish-performance/

@@ -1,0 +1,368 @@
+{
+  "before": {
+    "LiveWallMs": {
+      "Samples": 3,
+      "Median": 10890.0615,
+      "Minimum": 8048.6328,
+      "Maximum": 12357.5233
+    },
+    "LiveCpuMs": {
+      "Samples": 3,
+      "Median": 8734.375,
+      "Minimum": 6343.75,
+      "Maximum": 10546.875
+    },
+    "LiveAllocatedBytes": {
+      "Samples": 3,
+      "Median": 294255640.0,
+      "Minimum": 293855936.0,
+      "Maximum": 298289184.0
+    },
+    "Stages": {
+      "AutoDiscovery": {
+        "Samples": 3,
+        "Median": 2404.5284,
+        "Minimum": 1952.5768,
+        "Maximum": 2672.9825
+      },
+      "KnownRules": {
+        "Samples": 3,
+        "Median": 938.7504,
+        "Minimum": 850.9161,
+        "Maximum": 1114.177
+      },
+      "Other": {
+        "Samples": 3,
+        "Median": 1182.8864,
+        "Minimum": 1113.5603,
+        "Maximum": 1310.1873
+      },
+      "ScanAdobeRecoveryCaches": {
+        "Samples": 3,
+        "Median": 0.5862,
+        "Minimum": 0.5395,
+        "Maximum": 0.6134
+      },
+      "ScanBrowserProfileCaches": {
+        "Samples": 3,
+        "Median": 0.7782,
+        "Minimum": 0.743,
+        "Maximum": 0.8932
+      },
+      "ScanCodexOldVersions": {
+        "Samples": 3,
+        "Median": 5.7074,
+        "Minimum": 5.09,
+        "Maximum": 6.4497
+      },
+      "ScanCondaPkgs": {
+        "Samples": 3,
+        "Median": 17.5603,
+        "Minimum": 16.0775,
+        "Maximum": 22.3772
+      },
+      "ScanDockerWsl": {
+        "Samples": 3,
+        "Median": 238.5007,
+        "Minimum": 141.9682,
+        "Maximum": 306.2407
+      },
+      "ScanDoubaoCaches": {
+        "Samples": 3,
+        "Median": 11.6442,
+        "Minimum": 10.7671,
+        "Maximum": 11.9096
+      },
+      "ScanElectronApps": {
+        "Samples": 3,
+        "Median": 5.5452,
+        "Minimum": 5.5226,
+        "Maximum": 6.1587
+      },
+      "ScanFirefoxCaches": {
+        "Samples": 3,
+        "Median": 0.4466,
+        "Minimum": 0.3688,
+        "Maximum": 0.5153
+      },
+      "ScanGithubDesktopOldVersions": {
+        "Samples": 3,
+        "Median": 0.8206,
+        "Minimum": 0.7233,
+        "Maximum": 0.9515
+      },
+      "ScanJetBrains": {
+        "Samples": 3,
+        "Median": 0.5127,
+        "Minimum": 0.5008,
+        "Maximum": 0.5133
+      },
+      "ScanLeftoverTraces": {
+        "Samples": 3,
+        "Median": 790.8267,
+        "Minimum": 685.1442,
+        "Maximum": 827.4587
+      },
+      "ScanProjectArtifacts": {
+        "Samples": 3,
+        "Median": 4556.4235,
+        "Minimum": 2847.8488,
+        "Maximum": 5476.5377
+      },
+      "ScanUnknownAgentHomes": {
+        "Samples": 3,
+        "Median": 529.2165,
+        "Minimum": 377.3246,
+        "Maximum": 712.2851
+      },
+      "ScanUpdaterCaches": {
+        "Samples": 3,
+        "Median": 1.6958,
+        "Minimum": 1.6104,
+        "Maximum": 2.5419
+      },
+      "ScanUwpCacheFamilies": {
+        "Samples": 3,
+        "Median": 48.4704,
+        "Minimum": 43.728,
+        "Maximum": 63.0492
+      },
+      "ScanWeChatCache": {
+        "Samples": 3,
+        "Median": 0.5854,
+        "Minimum": 0.5286,
+        "Maximum": 0.6127
+      }
+    },
+    "Fixture": {
+      "Measure": {
+        "WallMs": {
+          "Samples": 21,
+          "Median": 126.4882,
+          "Minimum": 116.9109,
+          "Maximum": 211.0354
+        },
+        "AllocatedBytesMedian": 7185104.0
+      },
+      "Preview": {
+        "WallMs": {
+          "Samples": 21,
+          "Median": 126.5109,
+          "Minimum": 111.3608,
+          "Maximum": 189.8293
+        },
+        "AllocatedBytesMedian": 7188576.0
+      },
+      "Projects": {
+        "WallMs": {
+          "Samples": 21,
+          "Median": 25.9922,
+          "Minimum": 17.4633,
+          "Maximum": 73.275
+        },
+        "AllocatedBytesMedian": 23661728.0
+      },
+      "SumFiles": {
+        "WallMs": {
+          "Samples": 21,
+          "Median": 9.54,
+          "Minimum": 7.5909,
+          "Maximum": 13.6687
+        },
+        "AllocatedBytesMedian": 8482928.0
+      }
+    }
+  },
+  "after": {
+    "LiveWallMs": {
+      "Samples": 3,
+      "Median": 6689.4254,
+      "Minimum": 6552.311,
+      "Maximum": 10462.8486
+    },
+    "LiveCpuMs": {
+      "Samples": 3,
+      "Median": 4906.25,
+      "Minimum": 4890.625,
+      "Maximum": 8203.125
+    },
+    "LiveAllocatedBytes": {
+      "Samples": 3,
+      "Median": 235790416.0,
+      "Minimum": 234925472.0,
+      "Maximum": 237837640.0
+    },
+    "Stages": {
+      "AutoDiscovery": {
+        "Samples": 3,
+        "Median": 1298.531,
+        "Minimum": 1168.0399,
+        "Maximum": 2102.9976
+      },
+      "KnownRules": {
+        "Samples": 3,
+        "Median": 863.86,
+        "Minimum": 831.6695,
+        "Maximum": 995.7787
+      },
+      "Other": {
+        "Samples": 3,
+        "Median": 1139.39,
+        "Minimum": 1122.792,
+        "Maximum": 1290.222
+      },
+      "ScanAdobeRecoveryCaches": {
+        "Samples": 3,
+        "Median": 0.5934,
+        "Minimum": 0.5316,
+        "Maximum": 1.0634
+      },
+      "ScanBrowserProfileCaches": {
+        "Samples": 3,
+        "Median": 0.7607,
+        "Minimum": 0.7328,
+        "Maximum": 2.2406
+      },
+      "ScanCodexOldVersions": {
+        "Samples": 3,
+        "Median": 5.6331,
+        "Minimum": 5.4825,
+        "Maximum": 6.8248
+      },
+      "ScanCondaPkgs": {
+        "Samples": 3,
+        "Median": 12.9496,
+        "Minimum": 11.1479,
+        "Maximum": 59.8521
+      },
+      "ScanDockerWsl": {
+        "Samples": 3,
+        "Median": 142.2383,
+        "Minimum": 140.8154,
+        "Maximum": 241.0069
+      },
+      "ScanDoubaoCaches": {
+        "Samples": 3,
+        "Median": 12.3361,
+        "Minimum": 10.0213,
+        "Maximum": 16.5854
+      },
+      "ScanElectronApps": {
+        "Samples": 3,
+        "Median": 5.5772,
+        "Minimum": 4.6816,
+        "Maximum": 10.3579
+      },
+      "ScanFirefoxCaches": {
+        "Samples": 3,
+        "Median": 0.3791,
+        "Minimum": 0.3786,
+        "Maximum": 0.4382
+      },
+      "ScanGithubDesktopOldVersions": {
+        "Samples": 3,
+        "Median": 0.9136,
+        "Minimum": 0.7788,
+        "Maximum": 1.9367
+      },
+      "ScanJetBrains": {
+        "Samples": 3,
+        "Median": 0.5117,
+        "Minimum": 0.4371,
+        "Maximum": 0.5676
+      },
+      "ScanLeftoverTraces": {
+        "Samples": 3,
+        "Median": 700.4509,
+        "Minimum": 642.1866,
+        "Maximum": 897.6684
+      },
+      "ScanProjectArtifacts": {
+        "Samples": 3,
+        "Median": 2178.8316,
+        "Minimum": 2089.8745,
+        "Maximum": 4045.1938
+      },
+      "ScanUnknownAgentHomes": {
+        "Samples": 3,
+        "Median": 395.0769,
+        "Minimum": 374.1986,
+        "Maximum": 719.1171
+      },
+      "ScanUpdaterCaches": {
+        "Samples": 3,
+        "Median": 1.6333,
+        "Minimum": 1.4815,
+        "Maximum": 4.4635
+      },
+      "ScanUwpCacheFamilies": {
+        "Samples": 3,
+        "Median": 50.7817,
+        "Minimum": 43.6039,
+        "Maximum": 82.3662
+      },
+      "ScanWeChatCache": {
+        "Samples": 3,
+        "Median": 0.6526,
+        "Minimum": 0.5132,
+        "Maximum": 1.6188
+      }
+    },
+    "Fixture": {
+      "Measure": {
+        "WallMs": {
+          "Samples": 21,
+          "Median": 15.3715,
+          "Minimum": 13.4288,
+          "Maximum": 27.835
+        },
+        "AllocatedBytesMedian": 8574512.0
+      },
+      "Preview": {
+        "WallMs": {
+          "Samples": 21,
+          "Median": 17.6858,
+          "Minimum": 12.4112,
+          "Maximum": 50.7328
+        },
+        "AllocatedBytesMedian": 8577984.0
+      },
+      "Projects": {
+        "WallMs": {
+          "Samples": 21,
+          "Median": 18.5839,
+          "Minimum": 13.7654,
+          "Maximum": 62.4816
+        },
+        "AllocatedBytesMedian": 10420912.0
+      },
+      "SumFiles": {
+        "WallMs": {
+          "Samples": 21,
+          "Median": 9.3529,
+          "Minimum": 7.5442,
+          "Maximum": 14.0345
+        },
+        "AllocatedBytesMedian": 8482928.0
+      }
+    }
+  },
+  "RustWallMs": {
+    "Samples": 21,
+    "Median": 8.7518,
+    "Minimum": 7.5812,
+    "Maximum": 11.3005
+  },
+  "LiveIdentityConsistent": true,
+  "LiveIdentityHash": [
+    "07766720105B233E718456543AD5B77AA007B8B9ACEEDAE775065B3EB855EFC5"
+  ],
+  "Fixture": {
+    "Files": 24576,
+    "Bytes": 49922048,
+    "Rounds": 3,
+    "SamplesPerOperation": 21,
+    "Cache": "warm filesystem; Measure/SumFiles JIT warmup; Preview/Projects first sample may include initialization; alternating implementation order"
+  },
+  "SourceRevision": "988e77ef0284c92ec2d5b0819d50105e4ae07fbd"
+}
