@@ -40,6 +40,7 @@ CacheCleaner 的答案是一套**带安全语义的规则引擎**：87 条生效
 | 📊 **效果可观测** | 清理汇总以**磁盘可用空间差**为准（拒绝纸面数字）；逐项释放量与失败明细（被占用/权限不足的具体路径）落盘审计日志 |
 | ♻️ **可靠清理管线** | 命令式清理并行读取输出、限时轮询、随时可取消——系统维护进程（DISM 等）保留后台自行结束，绝不误杀；逐项「处理结果」列（成功/失败/跳过/待重启），清理后核实**真实残留大小**，单项失败不中断，任何结束方式都写入审计汇总 |
 | 📈 **增长分析** | 按「最后写入时间」找出最近 3/7/14 天新写入的大文件排行，直接回答「**谁在吃我的盘**」；命中可迁盘的大缓存时给出**迁盘顾问**命令 |
+| 💽 **全盘占用扫描** | 「更多工具」从系统盘根或任意目录统计所有可访问子目录，不限大小与层数；双击逐层下钻、大文件前 100 项、随时取消——只分析占用，不动任何文件 |
 | 🧩 **JSON 规则引擎** | 71 条默认规则内嵌 + 16 条 Agent 目录编译，放一份 `rules.user.json` 即可增改，**无需重新编译**（对标 Winapp2.ini 的思路） |
 | 🤖 **Agent 收录目录** | 18 个主流 agent 的收录清单（Claude Code / Codex / Gemini CLI / Qwen / OpenCode / Amazon Q / Goose / Crush / 通义灵码 / MarsCode 等），带探测签名、neverTouch 白名单、置信分级与核实日期 |
 | 🗺️ **未收录探测器** | 家目录下未被覆盖的大体积工具目录以「只报告不清理」列出——**已知全自动，未知看得见** |
@@ -59,6 +60,13 @@ CacheCleaner 的答案是一套**带安全语义的规则引擎**：87 条生效
 6. **全程可审计** —— 每一次扫描与清理：逐项释放量、失败路径、磁盘净增，全部落盘可复盘
 
 ## 🚀 快速开始
+
+### v5.2：全盘占用与更完整的清理
+
+- **更多工具 → 全盘占用扫描**：从系统盘根目录或自选目录统计所有可访问子目录，没有大小或层数限制。双击逐层查看，支持大文件前 100 项与取消，显示无法读取的位置和跳过的链接。此窗口只分析占用；文件逻辑大小不等于实际可释放空间，硬链接可能重复计量。
+- **更多工具 → 选择项目目录扫描**：支持用户目录以外的项目、深层嵌套项目；不再截断前 60 项，项目产物及自动发现缓存从 1 MB 起显示。新增项目项默认不勾选。
+- 大小统计保留可读取部分，界面与扫描日志标注统计不完整。只读文件在符合原有清理范围与保留期时解除只读后删除；删除失败恢复原属性。
+- 执行层保护 `reportOnly` 子目录、Agent `neverTouch` 路径与编辑器 `LocalHistory`，清理父目录也不会绕过；不跟随目录链接。只有明确的文件占用错误才登记重启删除。
 
 1. 前往 [**Releases 页面**](https://github.com/JiangSuRan/CacheCleaner/releases) 下载最新版 `CacheCleaner.exe`
 2. 双击运行（启动时弹出 UAC 提权确认——清理系统目录与重启删除登记需要管理员权限）
@@ -168,7 +176,8 @@ ISCC setup.iss
 ```
 ├── CacheScanner.cs        # 扫描/清理核心（三阶段扫描、规则引擎消费端、进程守卫）
 ├── CommandRunner.cs       # 命令式清理执行器（并行管道读取、限时轮询、取消/超时）
-├── FileCleaner.cs         # 文件删除执行器（逐目录处理、失败继续、跳过链接）
+├── FileCleaner.cs         # 文件删除执行器（逐目录处理、失败继续、跳过链接、只读文件处理）
+├── PathProtection.cs      # 执行层保护（reportOnly / neverTouch / LocalHistory、目录链接拦截）
 ├── CleaningRules.cs       # JSON 规则加载器（内嵌默认 + 侧车覆盖 + 目录编译）
 ├── AgentCatalog.cs        # Agent 目录加载与编译器
 ├── ProjectRegistry.cs     # 项目工件注册表加载
@@ -177,6 +186,8 @@ ISCC setup.iss
 ├── projects.registry.json # 项目工件注册表（8 类项目 / 26 项可再生产物）
 ├── CleanLog.cs            # 清理审计日志
 ├── GrowthDialog.cs        # 增长分析页（含迁盘顾问）
+├── DiskUsageScanner.cs    # 全盘占用统计（保留可读部分、跳过链接、可取消）
+├── DiskUsageDialog.cs     # 全盘占用扫描页（逐层下钻、大文件排行）
 ├── AppSettings.cs         # 设置持久化
 ├── MainForm.cs            # 主界面
 ├── Theme.cs               # 界面主题系统（色彩/字体/圆角面板/自绘按钮/进度条）
@@ -232,6 +243,7 @@ CacheCleaner's answer is a **semantics-aware rule engine**: 87 effective rules a
 | 📊 **Real observability** | Cleanup summaries are based on the **free-space delta** (no paper numbers); per-item freed amounts and failure details (the exact occupied or unauthorized paths) land in audit logs |
 | ♻️ **Reliable cleanup pipeline** | Command-based cleanups read output in parallel with bounded polling and stay cancellable — system maintenance processes (DISM etc.) keep running in the background, never killed; a per-item **Result** column (success / failed / skipped / reboot pending) with **real leftover sizes** verified after cleaning; one item failing never stops the run; every ending writes an audit summary |
 | 📈 **Growth analysis** | Ranks large files written in the last 3/7/14 days by last-write time — directly answers "**what's eating my disk**"; offers a **migration advisor** command for big relocatable caches |
+| 💽 **Whole-disk usage scan** | "More tools" measures every accessible subdirectory from the system-drive root or any folder — no size or depth caps; double-click to drill down, top-100 largest files, cancellable anytime. Analysis only — it never touches a file |
 | 🧩 **JSON rule engine** | 71 built-in rules + 16 compiled from the agent catalog; drop a `rules.user.json` beside the exe to add or override rules — **no recompiling** (in the spirit of Winapp2.ini) |
 | 🤖 **Agent catalog** | Curated coverage for 18 mainstream agents (Claude Code / Codex / Gemini CLI / Qwen / OpenCode / Amazon Q / Goose / Crush / Tongyi Lingma / MarsCode and more), each with detection signatures, neverTouch whitelists, confidence tiers and verified dates |
 | 🗺️ **Unknown detector** | Large tool directories in the user profile that aren't covered are listed read-only — **known is automatic, unknown stays visible** |
@@ -251,6 +263,13 @@ CacheCleaner's answer is a **semantics-aware rule engine**: 87 effective rules a
 6. **Everything audited** — every scan and cleanup: per-item freed amounts, failed paths, net disk delta — all on disk for review
 
 ## 🚀 Quick Start
+
+### v5.2: Whole-disk usage & more complete cleanup
+
+- **More tools → Whole-disk usage scan**: measures every accessible subdirectory from the system-drive root or any folder you pick — no size or depth limits. Double-click to drill down level by level, with a top-100 largest-files list, cancellation, and unreadable / link-skipped locations shown. This window only analyzes usage: logical file sizes don't equal reclaimable space, and hard links may be counted twice.
+- **More tools → Scan a project directory**: covers projects outside the user profile and deeply nested ones; no more 60-item cap, and project artifacts plus auto-discovered caches are listed from 1 MB. Newly added project items are unchecked by default.
+- Size statistics keep the readable portion, labeled incomplete in the UI and scan logs. Read-only files have the attribute cleared and are deleted within the existing cleanup scope and retention windows; the attribute is restored if deletion fails.
+- The execution layer protects `reportOnly` subdirectories, agent `neverTouch` paths and editor `LocalHistory` — cleaning a parent directory cannot bypass them — and never follows directory links. Only genuine file-in-use errors register reboot deletion.
 
 1. Grab the latest `CacheCleaner.exe` from the [**Releases page**](https://github.com/JiangSuRan/CacheCleaner/releases)
 2. Double-click to run (a UAC elevation prompt appears at startup — cleaning system directories and reboot-delete registration require administrator rights)

@@ -75,7 +75,10 @@
         "auth.json",
         ".credentials.json",
         "history.jsonl",
-        "AGENTS.md"
+        "AGENTS.md",
+        "skills",
+        "memories",
+        "plugins"
       ],
       "items": [
         {

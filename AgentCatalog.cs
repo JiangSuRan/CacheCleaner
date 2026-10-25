@@ -97,7 +97,7 @@ internal sealed class CatalogAgent
     /// <summary>home 的绝对路径（探测与覆盖判定用）</summary>
     public string? HomeFullPath => HomeBase switch
     {
-        BaseFolder.UserProfile => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Home),
+        BaseFolder.UserProfile => Path.Combine(new ScanContext().UserProfile, Home),
         BaseFolder.LocalAppData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Home),
         BaseFolder.AppData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Home),
         BaseFolder.ProgramData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), Home),

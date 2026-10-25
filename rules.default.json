@@ -477,7 +477,7 @@
     "name": "CLI 工具缓存根",
     "base": "userProfile",
     "path": ".cache",
-    "desc": "通用 CLI 工具缓存（babeldoc/chroma 等）。注意：若含 HuggingFace/torch 模型缓存，清理后需重新下载大文件",
+    "desc": "通用 CLI 工具缓存。HuggingFace 模型缓存受保护；其他缓存可能需要重新生成或下载，请核实后选择",
     "risk": "warn"
   },
   {

@@ -2,6 +2,8 @@ using CacheCleaner;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
 
 class Regression
 {
@@ -29,11 +31,37 @@ class Regression
         }
         if (args.Contains("--sleep")) { Thread.Sleep(1800); return 0; }
         if (args.Contains("--failure")) { Console.Error.WriteLine("fixture-error"); return 3; }
-        if (args.Contains("--ui")) return TestUi();
+        if (args.Contains("--ui"))
+        {
+            try { return TestUi(); }
+            catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+        }
+        if (args.Contains("--disk-live"))
+        {
+            var watch = Stopwatch.StartNew();
+            var scan = Invoke("DiskUsageScanner", "Scan", Path.GetPathRoot(Environment.SystemDirectory)!, null!, CancellationToken.None);
+            var node = scan.GetType().GetProperty("Root")!.GetValue(scan)!;
+            foreach (string property in new[] { "Bytes", "Unreadable", "LinksSkipped" })
+                Console.WriteLine(property + "=" + node.GetType().GetProperty(property)!.GetValue(node));
+            Console.WriteLine($"DISK_SCAN_OK elapsed={watch.Elapsed.TotalSeconds:F2}s files={scan.GetType().GetProperty("Files")!.GetValue(scan)} directories={scan.GetType().GetProperty("Directories")!.GetValue(scan)}");
+            return 0;
+        }
         string fixtures = Path.Combine(Path.GetDirectoryName(typeof(CacheScanner).Assembly.Location)!, "regression-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(fixtures);
         try
         {
+            // 仅在测试进程内增加规则，验证父目录清理不能绕过只读子规则。
+            string reports = Directory.CreateDirectory(Path.Combine(fixtures, "report-parent", "models")).FullName;
+            File.WriteAllText(Path.Combine(reports, "model"), "model");
+            File.WriteAllText(Path.Combine(Path.GetDirectoryName(reports)!, "cache"), "cache");
+            var assembly = typeof(CacheScanner).Assembly;
+            var rulesType = assembly.GetType("CacheCleaner.CleaningRules")!;
+            var rules = (System.Collections.IList)rulesType.GetProperty("All", BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!;
+            var testRule = Activator.CreateInstance(assembly.GetType("CacheCleaner.CleaningRule")!)!;
+            testRule.GetType().GetProperty("Name")!.SetValue(testRule, "fixture report-only");
+            testRule.GetType().GetProperty("Path")!.SetValue(testRule, reports);
+            testRule.GetType().GetProperty("Clean")!.SetValue(testRule, "reportOnly");
+            rules.Add(testRule);
             var watch = Stopwatch.StartNew();
             var flood = Command("--flood", 15000);
             Assert(flood.Ok && watch.Elapsed.TotalSeconds < 15, "大量 stdout/stderr 不堵塞进程");
@@ -56,6 +84,8 @@ class Regression
             var preview = Clean(previewDir,true,DateTime.Now.AddDays(-7));
             Assert(preview.FreedBytes == 100 && File.Exists(Path.Combine(previewDir,"old.bin")), "预览只统计符合保留期的文件");
             Assert(Directory.Exists(Path.Combine(previewDir,"empty")), "预览不删除空目录");
+            Assert(Clean(Path.GetDirectoryName(reports)!, false).FreedBytes == 5
+                && File.Exists(Path.Combine(reports, "model")), "清理父目录保留 reportOnly 子目录");
             var actual = Clean(previewDir,false,DateTime.Now.AddDays(-7));
             Assert(actual.FreedBytes == 100 && !File.Exists(Path.Combine(previewDir,"old.bin")) && File.Exists(Path.Combine(previewDir,"new.bin")), "真实删除保留最近文件");
             string recursive = Directory.CreateDirectory(Path.Combine(fixtures,"recursive","child")).FullName;
@@ -63,14 +93,18 @@ class Regression
             Assert(Clean(Path.GetDirectoryName(recursive)!,false).FreedBytes == 50 && !Directory.Exists(recursive), "递归删除准确计量并移除空子目录");
             string retained = Directory.CreateDirectory(Path.Combine(fixtures,"retained")).FullName;
             string readOnly = Path.Combine(retained,"readonly"); File.WriteAllText(readOnly,"retain"); File.SetAttributes(readOnly,FileAttributes.ReadOnly);
+            string history = Directory.CreateDirectory(Path.Combine(retained,"LocalHistory")).FullName;
+            string protectedFile = Path.Combine(history,"unsaved"); File.WriteAllText(protectedFile,"retain");
             File.WriteAllBytes(Path.Combine(retained,"allowed"),new byte[20]);
+            var readOnlyPreview = Clean(retained,true);
+            Assert(File.GetAttributes(readOnly).HasFlag(FileAttributes.ReadOnly) && readOnlyPreview.FreedBytes == 26,"预览不改变只读属性，也不统计受保护子目录");
             var partial = Clean(retained,false);
-            Assert(partial.PermissionDeniedCount == 1 && partial.FreedBytes == 20 && File.Exists(readOnly), "失败文件如实统计，其他文件继续清理");
+            Assert(partial.PermissionDeniedCount == 0 && partial.FreedBytes == 26 && !File.Exists(readOnly) && File.Exists(protectedFile), "只读垃圾可以删除，父目录清理保留本地历史");
             var measure = ((long Bytes,bool Complete))Invoke("FileCleaner","Measure",retained,CancellationToken.None);
             Assert(measure.Complete && measure.Bytes == 6,"剩余文件大小核实");
             var retainedItem = new CacheItem { Name="[项目] regression", Path=retained, Exists=true, SizeBytes=200 };
             var retainedResult = CacheScanner.CleanItem(retainedItem);
-            Assert(retainedResult.PermissionDeniedCount == 1 && retainedItem.SizeBytes == 6,"CleanItem 保留真实残留大小，不误报零");
+            Assert(retainedResult.PermissionDeniedCount == 0 && retainedItem.SizeBytes == 6,"CleanItem 保留真实残留大小，不误报零");
             string versions=Directory.CreateDirectory(Path.Combine(fixtures,"versions")).FullName;
             string oldVersion=Directory.CreateDirectory(Path.Combine(versions,"old")).FullName;
             string newest=Directory.CreateDirectory(Path.Combine(versions,"new")).FullName;
@@ -81,7 +115,7 @@ class Regression
             Directory.SetLastWriteTime(oldVersion,DateTime.Now.AddDays(-2));
             Directory.SetLastWriteTime(newest,DateTime.Now);
             var versionResult=(CleanResult)Invoke("CacheScanner","CleanKeepNewest",versions,CancellationToken.None);
-            Assert(versionResult.FreedBytes == 15 && versionResult.PermissionDeniedCount == 1 && File.Exists(Path.Combine(newest,"program")),"旧版本部分失败仍清理其他文件且保留最新版本");
+            Assert(versionResult.FreedBytes == 21 && versionResult.PermissionDeniedCount == 0 && !Directory.Exists(oldVersion) && File.Exists(Path.Combine(newest,"program")),"清除旧版本的只读文件且保留最新版本");
             string cancelling = Directory.CreateDirectory(Path.Combine(fixtures,"cancel")).FullName;
             for(int i=0;i<5;i++) File.WriteAllBytes(Path.Combine(cancelling,i.ToString()),new byte[10]);
             using(var cancel = new CancellationTokenSource())
@@ -95,10 +129,12 @@ class Regression
             }
             CacheScanner.DryRun = false;
             var report = new CacheItem { Name="未收录工具目录 (fixture)", Path=retained, Exists=true, SizeBytes=6 };
-            Assert(!CacheScanner.CanClean(report) && CacheScanner.CleanItem(report).SkippedCount == 1 && File.Exists(readOnly),"只读报告不可清理且明确跳过");
+            Assert(!CacheScanner.CanClean(report) && CacheScanner.CleanItem(report).SkippedCount == 1 && File.Exists(protectedFile),"只读报告不可清理且明确跳过");
             TestProjectMarkers(fixtures);
+            TestCoverage(fixtures);
             Console.WriteLine("REGRESSION_OK"); return 0;
         }
+        catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
         finally
         {
             CacheScanner.DryRun = false;
@@ -106,6 +142,94 @@ class Regression
             Directory.Delete(fixtures,true);
         }
     }
+    static void TestCoverage(string fixtures)
+    {
+        string root = Directory.CreateDirectory(Path.Combine(fixtures, "coverage")).FullName;
+        File.WriteAllBytes(Path.Combine(root, "small"), new byte[19]);
+        string blocked = Directory.CreateDirectory(Path.Combine(root, "blocked")).FullName;
+        File.WriteAllBytes(Path.Combine(blocked, "secret"), new byte[30]);
+        var info = new DirectoryInfo(blocked);
+        var originalAcl = info.GetAccessControl();
+        var deniedAcl = info.GetAccessControl();
+        deniedAcl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.WorldSid, null),
+            FileSystemRights.ListDirectory, AccessControlType.Deny));
+        try
+        {
+            info.SetAccessControl(deniedAcl);
+            Assert(CacheScanner.SumFiles(root) == 19, "不可读子目录不再导致整项统计归零");
+            var scan = Invoke("DiskUsageScanner", "Scan", root, null!, CancellationToken.None);
+            var node = scan.GetType().GetProperty("Root")!.GetValue(scan)!;
+            Assert((long)node.GetType().GetProperty("Bytes")!.GetValue(node)! == 19
+                && (int)node.GetType().GetProperty("Unreadable")!.GetValue(node)! > 0, "全盘扫描保留可读大小并报告不可读位置");
+        }
+        finally
+        {
+            var restored = new DirectorySecurity();
+            restored.SetSecurityDescriptorSddlForm(originalAcl.GetSecurityDescriptorSddlForm(AccessControlSections.Access), AccessControlSections.Access);
+            info.SetAccessControl(restored);
+        }
+        string locked = Path.Combine(root, "readonly-locked");
+        File.WriteAllText(locked, "locked");
+        File.SetAttributes(locked, FileAttributes.ReadOnly);
+        using (var handle = File.Open(locked, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            try { Invoke("FileCleaner", "DeleteFile", new FileInfo(locked)); throw new Exception("未报告占用"); }
+            catch (IOException) { Assert(File.GetAttributes(locked).HasFlag(FileAttributes.ReadOnly), "删除失败恢复原只读属性"); }
+        }
+        var before = File.GetLastWriteTimeUtc(Path.Combine(root, "small"));
+        var complete = Invoke("DiskUsageScanner", "Scan", root, null!, CancellationToken.None);
+        var completeRoot = complete.GetType().GetProperty("Root")!.GetValue(complete)!;
+        long completeBytes = (long)completeRoot.GetType().GetProperty("Bytes")!.GetValue(completeRoot)!;
+        Assert(completeBytes == 55
+            && File.GetLastWriteTimeUtc(Path.Combine(root, "small")) == before, $"全盘扫描无最小体积门槛且不修改文件（统计 {completeBytes} 字节）");
+        using (var cancellation = new CancellationTokenSource())
+        {
+            cancellation.Cancel();
+            try { Invoke("DiskUsageScanner", "Scan", root, null!, cancellation.Token); throw new Exception("未取消"); }
+            catch (OperationCanceledException) { Assert(true, "全盘扫描响应取消"); }
+        }
+        string linkRoot = Directory.CreateDirectory(Path.Combine(fixtures, "links")).FullName;
+        string target = Directory.CreateDirectory(Path.Combine(fixtures, "link-target")).FullName;
+        File.WriteAllBytes(Path.Combine(target, "keep"), new byte[42]);
+        File.WriteAllBytes(Path.Combine(linkRoot, "cache"), new byte[11]);
+        string junction = Path.Combine(linkRoot, "junction");
+        using (var command = Process.Start(new ProcessStartInfo("cmd.exe", $"/d /c mklink /J \"{junction}\" \"{target}\"")
+            { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true })!)
+        {
+            command.WaitForExit();
+            Assert(command.ExitCode == 0, "建立隔离目录链接测试夹具");
+        }
+        try
+        {
+            var linked = Invoke("DiskUsageScanner", "Scan", linkRoot, null!, CancellationToken.None);
+            var linkedRoot = linked.GetType().GetProperty("Root")!.GetValue(linked)!;
+            Assert((long)linkedRoot.GetType().GetProperty("Bytes")!.GetValue(linkedRoot)! == 11
+                && (int)linkedRoot.GetType().GetProperty("LinksSkipped")!.GetValue(linkedRoot)! == 1, "全盘扫描不跟随 junction 且报告跳过");
+            Assert(Clean(linkRoot, false).FreedBytes == 11 && File.Exists(Path.Combine(target, "keep")), "清理目录不越过 junction 修改目标文件");
+        }
+        finally { Directory.Delete(junction); }
+        string projects = Directory.CreateDirectory(Path.Combine(fixtures, "many-projects")).FullName;
+        for (int i = 0; i < 65; i++)
+        {
+            string project = Directory.CreateDirectory(Path.Combine(projects, i.ToString())).FullName;
+            File.WriteAllText(Path.Combine(project, "package.json"), "{}");
+            var artifact = Directory.CreateDirectory(Path.Combine(project, "node_modules")).FullName;
+            using var data = File.Create(Path.Combine(artifact, "data")); data.SetLength(1024 * 1024);
+        }
+        string deep = Directory.CreateDirectory(Path.Combine(projects, "0", "packages", "a", "b", "c", "d", "e", "f", "nested")).FullName;
+        File.WriteAllText(Path.Combine(deep, "package.json"), "{}");
+        string deepArtifact = Directory.CreateDirectory(Path.Combine(deep, "node_modules")).FullName;
+        using (var data = File.Create(Path.Combine(deepArtifact, "data"))) data.SetLength(1024 * 1024);
+        var found = CacheScanner.ScanProjects(projects);
+        Assert(found.Count == 66 && found.Any(i => i.Path == deepArtifact), "项目扫描覆盖深层嵌套项目、1MB 产物且不截断前60项");
+        string profile = Environment.GetEnvironmentVariable("USERPROFILE") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string hf = Path.Combine(profile, ".cache", "huggingface", "model.bin");
+        Assert((bool)Invoke("PathProtection", "IsProtected", hf), "HuggingFace 报告目录保护覆盖其子文件");
+        string skills = Path.Combine(profile, ".codex", "skills", "fixture");
+        Assert((bool)Invoke("PathProtection", "IsProtected", skills), "Agent neverTouch 在执行层保护技能目录");
+        Assert(!(bool)Invoke("PathProtection", "IsWithin", root + "-sibling", root), "路径边界不会误匹配同名前缀目录");
+    }
+
     static void TestProjectMarkers(string fixtures)
     {
         string root=Directory.CreateDirectory(Path.Combine(fixtures,"projects")).FullName;
@@ -122,12 +246,15 @@ class Regression
         File.WriteAllText(Path.Combine(root,"python","requirements.txt"),"");
         Artifact("dotnet","bin");
         File.WriteAllText(Path.Combine(root,"dotnet","solution.SLN"),"");
+        Artifact("dotnet-project","obj");
+        File.WriteAllText(Path.Combine(root,"dotnet-project","example.csproj"),"");
         var types=typeof(CacheScanner).Assembly.GetType("CacheCleaner.ProjectRegistry")!.GetProperty("All",BindingFlags.Public|BindingFlags.Static)!.GetValue(null)!;
         var found=new List<CacheItem>();
         Invoke("CacheScanner","WalkProjects",root,0,types,found,CancellationToken.None);
-        Assert(found.Count==3,"项目匹配保持类型优先级、附加标记和后缀规则");
+        Assert(found.Count==4,"项目匹配保持类型优先级、附加标记和后缀规则，并识别 csproj");
         Assert(found.Single(item=>item.Path==Path.Combine(root,"node","node_modules")).Risk==RiskLevel.Warn,"主标记大小写匹配与活跃项目分级保持一致");
-        Assert(found.Single(item=>item.Path==Path.Combine(root,"python",".venv")).Risk==RiskLevel.Safe,"附加标记沿用现有活跃度判断");
+        Assert(found.Single(item=>item.Path==Path.Combine(root,"python",".venv")).Risk==RiskLevel.Warn,"附加标记参与活跃度判断，近期项目保持注意级别");
+        Assert(found.Single(item=>item.Path==Path.Combine(root,"dotnet-project","obj")).Risk==RiskLevel.Warn,"csproj 后缀标记参与活跃度判断");
     }
     static int TestUi()
     {
@@ -143,6 +270,7 @@ class Regression
         Assert(grid.Rows[0].Cells["Checked"].Value is false && grid.Rows[0].Cells["Checked"].ReadOnly,"全选排除只读报告");
         Assert(grid.Rows[1].Cells["Checked"].Value is true && grid.Rows[1].Tag is CacheItem { Name:"[项目] fixture" },"行保留原始清理身份");
         Assert(grid.Columns.Contains("Result"),"处理结果独立列");
+        Assert(Field<Control>("btnTrend").ContextMenuStrip!.Items.Cast<ToolStripItem>().Any(i => i.Text == "全盘占用扫描"), "主界面提供全盘占用扫描入口");
         Call("SetState",Enum.Parse(typeof(MainForm).Assembly.GetType("CacheCleaner.UiState")!,"Cleaning"),"清理中","fixture");
         Call("SetControlsEnabled",false);
         Assert(!grid.Enabled && Field<Control>("btnCancel").Enabled,"清理时锁定表格并允许取消");
@@ -155,6 +283,40 @@ class Regression
             using var graphics=Graphics.FromImage(bitmap);
             graphics.CopyFromScreen(form.Location,Point.Empty,form.Size);
             bitmap.Save(Path.Combine(AppContext.BaseDirectory,"ui-check.png"));
+        }
+        var diskType = typeof(CacheScanner).Assembly.GetType("CacheCleaner.DiskUsageDialog")!;
+        using (var disk = (Form)Activator.CreateInstance(diskType, Hidden, null, new object[] { Array.Empty<CacheItem>() }, null)!)
+        {
+            disk.Show(form);
+            Application.DoEvents();
+            var diskGrid = (DataGridView)diskType.GetField("grid", Hidden)!.GetValue(disk)!;
+            Assert(diskGrid.ReadOnly && !diskGrid.AllowUserToDeleteRows, "全盘占用窗口全程只读");
+            Assert(disk.Controls.OfType<FlowLayoutPanel>().Single().Controls.Cast<Control>().All(c => c.Bounds.Bottom <= c.Parent!.ClientSize.Height), "全盘扫描工具栏完整显示");
+            string uiFixture = Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "ui-fixture-" + Guid.NewGuid().ToString("N"))).FullName;
+            try
+            {
+                string child = Directory.CreateDirectory(Path.Combine(uiFixture, "sample-cache")).FullName;
+                File.WriteAllBytes(Path.Combine(child, "small-file"), new byte[120]);
+                File.WriteAllBytes(Path.Combine(uiFixture, "direct-file"), new byte[30]);
+                ((TextBox)diskType.GetField("root", Hidden)!.GetValue(disk)!).Text = uiFixture;
+                var scanTask = (Task)diskType.GetMethod("Scan", Hidden)!.Invoke(disk, null)!;
+                var watch = Stopwatch.StartNew();
+                while (!scanTask.IsCompleted && watch.Elapsed.TotalSeconds < 10) { Application.DoEvents(); Thread.Sleep(10); }
+                Assert(scanTask.IsCompletedSuccessfully && diskGrid.Rows.Count == 2, "窗口扫描完成显示目录与直接文件合计");
+                typeof(DataGridView).GetMethod("OnCellDoubleClick", BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .Invoke(diskGrid, new object[] { new DataGridViewCellEventArgs(0, 0) });
+                Assert(diskGrid.Rows.Count == 1, "双击目录可查看下一层");
+                ((Button)diskType.GetField("up", Hidden)!.GetValue(disk)!).PerformClick();
+                Assert(diskGrid.Rows.Count == 2, "上一级恢复目录列表");
+                var filesView = (CheckBox)diskType.GetField("filesView", Hidden)!.GetValue(disk)!;
+                filesView.Checked = true;
+                Assert(diskGrid.Rows.Count == 2 && diskGrid.Rows[0].Cells["Bytes"].Value is long bytes && bytes == 120, "大文件排行按实际大小排序");
+                filesView.Checked = false;
+            }
+            finally { Directory.Delete(uiFixture, true); }
+            using var bitmap = new Bitmap(disk.Width, disk.Height);
+            disk.DrawToBitmap(bitmap, new Rectangle(Point.Empty, disk.Size));
+            bitmap.Save(Path.Combine(AppContext.BaseDirectory, "disk-ui-check.png"));
         }
         Console.WriteLine("UI_REGRESSION_OK");
         // 不触发主窗体关闭时的设置保存。

@@ -198,14 +198,24 @@ public class MainForm : Form
         btnSelectAll = MakeButton("全选", '\uE73A', ButtonStyle.Ghost);
         btnSelectNone = MakeButton("取消选择", '\uE739', ButtonStyle.Ghost);
         btnCancel = MakeButton("取消扫描", '\uE711', ButtonStyle.Ghost);
-        btnTrend = MakeButton("趋势分析", '\uE9D2', ButtonStyle.Secondary);
+        btnTrend = MakeButton("更多工具", '\uE9D2', ButtonStyle.Secondary);
 
         btnScan.Click += BtnScan_Click;
         btnClean.Click += BtnClean_Click;
         btnSelectAll.Click += (_, _) => SetAllChecked(true);
         btnSelectNone.Click += (_, _) => SetAllChecked(false);
         btnCancel.Click += (_, _) => _cts?.Cancel();
-        btnTrend.Click += (_, _) => new GrowthDialog().ShowDialog(this);
+        var toolsMenu = new ContextMenuStrip();
+        toolsMenu.Items.Add("全盘占用扫描", null, (_, _) =>
+        {
+            using var dialog = new DiskUsageDialog(dgv.Rows.Cast<DataGridViewRow>().Select(r => r.Tag).OfType<CacheItem>().ToList());
+            dialog.ShowDialog(this);
+        });
+        toolsMenu.Items.Add("选择项目目录扫描", null, BtnProjectScan_Click);
+        toolsMenu.Items.Add("趋势分析", null, (_, _) => { using var dialog = new GrowthDialog(); dialog.ShowDialog(this); });
+        btnTrend.ContextMenuStrip = toolsMenu;
+        btnTrend.Click += (_, _) => toolsMenu.Show(btnTrend, new Point(0, btnTrend.Height));
+        Disposed += (_, _) => toolsMenu.Dispose();
 
         foreach (var b in new[] { btnScan, btnClean, btnSelectAll, btnSelectNone, btnCancel, btnTrend })
         {
@@ -751,6 +761,11 @@ public class MainForm : Form
             item.Path
         );
         dgv.Rows[rowIdx].Tag = item;
+        if (item.SizeIncomplete)
+        {
+            dgv.Rows[rowIdx].Cells["Result"].Value = "统计不完整";
+            dgv.Rows[rowIdx].Cells["Size"].ToolTipText = "部分子目录无法读取，当前大小为可读取部分。";
+        }
         if (!CacheScanner.CanClean(item)) dgv.Rows[rowIdx].Cells["Checked"].ReadOnly = true;
 
         // 自动发现项文字降一档（信息权重：已知规则优先）
@@ -771,6 +786,43 @@ public class MainForm : Form
     /// <summary>
     /// 清理按钮点击
     /// </summary>
+    private async void BtnProjectScan_Click(object? sender, EventArgs e)
+    {
+        if (_cts != null) return;
+        using var picker = new FolderBrowserDialog { Description = "选择项目或项目集合目录；仅识别已收录的构建产物" };
+        if (picker.ShowDialog(this) != DialogResult.OK) return;
+        _cts = new CancellationTokenSource();
+        SetControlsEnabled(false);
+        SetState(UiState.Scanning, "扫描项目", picker.SelectedPath);
+        progress.Indeterminate = true;
+        progress.Visible = true;
+        try
+        {
+            var items = await Task.Run(() => CacheScanner.ScanProjects(picker.SelectedPath, _cts.Token));
+            var existing = dgv.Rows.Cast<DataGridViewRow>().Select(r => r.Tag).OfType<CacheItem>()
+                .Select(i => i.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            int added = 0;
+            foreach (var item in items)
+                if (existing.Add(item.Path)) { AddCacheRow(item, false); added++; }
+            dgv.Sort(dgv.Columns["Size"]!, ListSortDirection.Descending);
+            CleanLog.LogScan(items);
+            SetState(UiState.ScanCompleted, "项目扫描完成", $"新增 {added} 项，请逐项勾选");
+            lblFound.Text = $"已发现 {dgv.Rows.Count} 项";
+            lblEmpty.Visible = dgv.Rows.Count == 0;
+            UpdateSelected();
+        }
+        catch (OperationCanceledException) { SetState(UiState.Cancelled, "已取消项目扫描", ""); }
+        catch (Exception ex) { SetState(UiState.Error, "项目扫描失败", ex.Message); }
+        finally
+        {
+            progress.Visible = false;
+            progress.Indeterminate = false;
+            _cts.Dispose();
+            _cts = null;
+            SetControlsEnabled(true);
+        }
+    }
+
     private async void BtnClean_Click(object? sender, EventArgs e)
     {
         if (_cts != null) return;

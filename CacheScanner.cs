@@ -64,6 +64,7 @@ public class CacheItem
     public bool Exists { get; set; }
     public bool Checked { get; set; }
     public RiskLevel Risk { get; set; } = RiskLevel.Safe;
+    public bool SizeIncomplete => CacheScanner.IncompleteSizes.ContainsKey(Path);
 }
 
 /// <summary>
@@ -73,7 +74,8 @@ internal sealed class ScanContext
 {
     public string LocalAppData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
     public string AppData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-    public string UserProfile { get; } = Environment.GetEnvironmentVariable("USERPROFILE") ?? "";
+    public string UserProfile { get; } = Environment.GetEnvironmentVariable("USERPROFILE")
+        ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     public string WindowsDir { get; } = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
     public string ProgramData { get; } = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
 }
@@ -83,6 +85,8 @@ internal sealed class ScanContext
 /// </summary>
 public static class CacheScanner
 {
+    internal static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> IncompleteSizes = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly AsyncLocal<CancellationToken> ScanToken = new();
     private static readonly string[] SizeUnits = ["B", "KB", "MB", "GB", "TB"];
 
     // 系统盘根（如 C:\）：运行时从系统目录推导，Windows 装在非 C 盘的机器上同样可用。
@@ -148,8 +152,8 @@ public static class CacheScanner
         "packages", ".nuget"
     };
 
-    // 最小报告阈值：50 MB
-    private const long MinReportSize = 50 * 1024 * 1024;
+    // 快速扫描从 1 MB 起显示；全盘占用扫描没有大小阈值。
+    private const long MinReportSize = 1024 * 1024;
     // 最大扫描深度
     private const int MaxDepth = 8;
 
@@ -169,6 +173,8 @@ public static class CacheScanner
         IProgress<(int current, int total, string name)>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        ScanToken.Value = cancellationToken;
+        IncompleteSizes.Clear();
         var items = new List<CacheItem>();
         var ctx = new ScanContext();
         var condaCandidates = GetCondaPkgsCandidates();
@@ -282,7 +288,7 @@ public static class CacheScanner
                         {
                             // 指定文件模式的项（缩略图/图标缓存、CBS 日志）：只统计匹配文件
                             foreach (var pattern in rule.FilesPatterns)
-                                item.SizeBytes += SumFiles(resolved, pattern, SearchOption.TopDirectoryOnly);
+                                item.SizeBytes += SumFiles(resolved, pattern, rule.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
                         }
                         else
                         {
@@ -495,18 +501,9 @@ public static class CacheScanner
     {
         using var metric = ScanDiagnostics.SizeQuery(path, pattern, searchOption);
         if (!Directory.Exists(path)) return 0;
-        try
-        {
-            var dir = new DirectoryInfo(path);
-            return dir.EnumerateFiles(pattern, searchOption)
-                .Sum(f => { try { return f.Length; } catch { return 0L; } });
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"计算目录大小失败 {path}: {ex.Message}");
-            return 0;
-        }
+        var result = FileCleaner.MeasureFiles(path, pattern, searchOption == SearchOption.AllDirectories, ScanToken.Value);
+        if (!result.Complete) IncompleteSizes.TryAdd(path, 0);
+        return result.Bytes;
     }
 
     /// <summary>
@@ -558,6 +555,11 @@ public static class CacheScanner
 
     private static CleanResult CleanItemCore(CacheItem item, IProgress<string>? progress, CancellationToken cancellationToken)
     {
+        if (!CanClean(item))
+            return new CleanResult { SkippedCount = 1, Detail = "只读报告或受保护路径，未执行清理" };
+        if ((Directory.Exists(item.Path) || File.Exists(item.Path))
+            && (PathProtection.IsProtected(item.Path) || PathProtection.HasLinkedAncestor(item.Path)))
+            return new CleanResult { SkippedCount = 1, Detail = "保留受保护路径或目录链接" };
         // 命令式清理项没有可校验的真实路径（Path 为「（命令式清理）」占位符），必须在
         // 存在性门卫之前分发，否则 File/Directory 检查永远失败，清理函数沦为死代码
         if (item.Name == "DNS 解析缓存")
@@ -735,13 +737,13 @@ public static class CacheScanner
             var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             var windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
-            if (fullPath.StartsWith(userProfile, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(userProfile) && PathProtection.IsWithin(fullPath, userProfile))
                 return true;
-            if (fullPath.StartsWith(localAppData, StringComparison.OrdinalIgnoreCase))
+            if (PathProtection.IsWithin(fullPath, localAppData))
                 return true;
-            if (fullPath.StartsWith(appData, StringComparison.OrdinalIgnoreCase))
+            if (PathProtection.IsWithin(fullPath, appData))
                 return true;
-            if (fullPath.StartsWith(windowsDir, StringComparison.OrdinalIgnoreCase))
+            if (PathProtection.IsWithin(fullPath, windowsDir))
                 return true;
             // 自动发现的多用户路径（系统盘 Users 下的其他用户目录）
             if (fullPath.StartsWith(SysRoot + "Users\\", StringComparison.OrdinalIgnoreCase))
@@ -810,18 +812,22 @@ public static class CacheScanner
         if (!File.Exists(filePath)) return default;
         try
         {
+            if (PathProtection.IsProtected(filePath) || PathProtection.HasLinkedAncestor(filePath))
+                return new CleanResult { SkippedCount = 1, Detail = "保留受保护路径或目录链接" };
             long len = new FileInfo(filePath).Length;
             if (DryRun)
             {
                 // 预览模式：不删除，仅统计将释放的量
                 return new CleanResult(len, 1, 0, 0, 0, 0);
             }
-            File.Delete(filePath);
+            FileCleaner.DeleteFile(new FileInfo(filePath));
             return new CleanResult(len, 1, 0, 0, 0, 0);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
-            if (ScheduleDeleteOnReboot(filePath)) return new CleanResult(0, 0, 0, 0, 0, 1);
+            if ((ex.HResult & 0xffff) is not (32 or 33))
+                return new CleanResult(0, 0, 0, 0, 1, 0) { Detail = ex.Message };
+            if (!DryRun && ScheduleDeleteOnReboot(filePath)) return new CleanResult(0, 0, 0, 0, 0, 1);
             Debug.WriteLine($"文件被占用，跳过 {filePath}");
             return new CleanResult(0, 0, 1, 0, 0, 0);
         }
@@ -1711,6 +1717,7 @@ public static class CacheScanner
         IProgress<(int dirsScanned, string currentPath)>? progress = null,
         CancellationToken ct = default)
     {
+        ScanToken.Value = ct;
         ScanDiagnostics.NextStage("AutoDiscovery");
         var knownPaths = BuildKnownPathsSet(knownItems);
         var results = new List<CacheItem>();
@@ -2331,7 +2338,7 @@ public static class CacheScanner
         var found = new List<CacheItem>();
         WalkProjects(ctx.UserProfile, 0, types, found, cancellationToken);
 
-        foreach (var item in found.OrderByDescending(i => i.SizeBytes).Take(MaxProjectItems))
+        foreach (var item in found.OrderByDescending(i => i.SizeBytes))
         {
             total++;
             current++;
@@ -2347,9 +2354,7 @@ public static class CacheScanner
         "Pods", "DerivedData", ".tox", ".nox", ".gradle", "site-packages"
     };
 
-    private const int MaxProjectDepth = 7;
-    private const long MinArtifactSize = 50L * 1024 * 1024;
-    private const int MaxProjectItems = 60;
+    private const long MinArtifactSize = 1024 * 1024;
     private static readonly TimeSpan ActiveWindow = TimeSpan.FromDays(90);
 
     private static void WalkProjects(
@@ -2359,60 +2364,84 @@ public static class CacheScanner
         List<CacheItem> found,
         CancellationToken cancellationToken)
     {
-        if (depth > MaxProjectDepth) return;
-        cancellationToken.ThrowIfCancellationRequested();
-
-        FileInfo[] markerFiles;
-        var directoryInfo = new DirectoryInfo(dir);
-        try { markerFiles = directoryInfo.GetFiles(); } catch { return; }
-        var markerNames = markerFiles.Select(file => file.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        // 标记文件匹配（主标记 / 附加标记 / 后缀）
-        ProjectType? matched = null;
-        foreach (var t in types)
+        var pending = new Stack<string>();
+        pending.Push(dir);
+        while (pending.TryPop(out var projectDirectory))
         {
-            bool hit = markerNames.Contains(t.Marker)
-                || t.Markers.Any(markerNames.Contains)
-                || t.MarkersSuffix.Any(sfx => markerNames.Any(name =>
-                    name.EndsWith(sfx, StringComparison.OrdinalIgnoreCase)));
-            if (hit) { matched = t; break; }
-        }
+            dir = projectDirectory;
+            cancellationToken.ThrowIfCancellationRequested();
 
-        if (matched != null)
-        {
-            // 项目根：枚举产物，不再下钻
-            bool active = markerFiles.Any(f =>
-                string.Equals(f.Name, matched.Marker, StringComparison.OrdinalIgnoreCase)
-                && f.LastWriteTime > DateTime.Now.Subtract(ActiveWindow));
-
-            foreach (var art in matched.Artifacts)
+            FileInfo[] markerFiles;
+            var directoryInfo = new DirectoryInfo(dir);
+            try
             {
-                var artifactPath = Path.Combine(dir, art.Path);
-                if (art.File)
+                if ((directoryInfo.Attributes & FileAttributes.ReparsePoint) != 0) continue;
+                markerFiles = directoryInfo.GetFiles();
+            }
+            catch (IOException) { continue; }
+            catch (UnauthorizedAccessException) { continue; }
+            var markerNames = markerFiles.Select(file => file.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // 标记文件匹配（主标记 / 附加标记 / 后缀）
+            ProjectType? matched = null;
+            foreach (var t in types)
+            {
+                bool hit = markerNames.Contains(t.Marker)
+                    || t.Markers.Any(markerNames.Contains)
+                    || t.MarkersSuffix.Any(sfx => markerNames.Any(name =>
+                        name.EndsWith(sfx, StringComparison.OrdinalIgnoreCase)));
+                if (hit) { matched = t; break; }
+            }
+
+            if (matched != null)
+            {
+                // 跳过依赖和产物，仍继续寻找嵌套项目。
+                bool active = markerFiles.Any(f =>
+                    (string.Equals(f.Name, matched.Marker, StringComparison.OrdinalIgnoreCase)
+                     || matched.Markers.Contains(f.Name, StringComparer.OrdinalIgnoreCase)
+                     || matched.MarkersSuffix.Any(sfx => f.Name.EndsWith(sfx, StringComparison.OrdinalIgnoreCase)))
+                    && f.LastWriteTime > DateTime.Now.Subtract(ActiveWindow));
+
+                foreach (var art in matched.Artifacts)
                 {
-                    var fi = new FileInfo(artifactPath);
-                    if (fi.Exists && fi.Length >= MinArtifactSize)
-                        found.Add(MakeArtifactItem(dir, matched, art, artifactPath, fi.Length, active));
-                }
-                else if (Directory.Exists(artifactPath))
-                {
-                    long size = SumFiles(artifactPath);
-                    if (size >= MinArtifactSize)
-                        found.Add(MakeArtifactItem(dir, matched, art, artifactPath, size, active));
+                    var artifactPath = Path.Combine(dir, art.Path);
+                    if (art.File)
+                    {
+                        var fi = new FileInfo(artifactPath);
+                        if (fi.Exists && fi.Length >= MinArtifactSize)
+                            found.Add(MakeArtifactItem(dir, matched, art, artifactPath, fi.Length, active));
+                    }
+                    else if (Directory.Exists(artifactPath))
+                    {
+                        long size = SumFiles(artifactPath);
+                        if (size >= MinArtifactSize)
+                            found.Add(MakeArtifactItem(dir, matched, art, artifactPath, size, active));
+                    }
                 }
             }
-            return;
-        }
 
-        DirectoryInfo[] subDirs;
-        try { subDirs = directoryInfo.GetDirectories(); } catch { return; }
-        foreach (var sub in subDirs)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (PruneInsideNames.Contains(sub.Name)) continue;
-            if ((sub.Attributes & FileAttributes.ReparsePoint) != 0) continue;
-            WalkProjects(sub.FullName, depth + 1, types, found, cancellationToken);
+            DirectoryInfo[] subDirs;
+            try { subDirs = directoryInfo.GetDirectories(); }
+            catch (IOException) { continue; }
+            catch (UnauthorizedAccessException) { continue; }
+            foreach (var sub in subDirs)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (PruneInsideNames.Contains(sub.Name)) continue;
+                if (matched?.Artifacts.Any(a => PathProtection.IsWithin(sub.FullName, Path.Combine(dir, a.Path))) == true) continue;
+                if ((sub.Attributes & FileAttributes.ReparsePoint) != 0) continue;
+                pending.Push(sub.FullName);
+            }
         }
+    }
+
+    public static List<CacheItem> ScanProjects(string root, CancellationToken cancellationToken = default)
+    {
+        ScanToken.Value = cancellationToken;
+        if (PathProtection.HasLinkedAncestor(root)) throw new IOException("请选择实际目录，不能使用目录链接。");
+        var items = new List<CacheItem>();
+        WalkProjects(root, 0, ProjectRegistry.All, items, cancellationToken);
+        return items.OrderByDescending(i => i.SizeBytes).ToList();
     }
 
     private static CacheItem MakeArtifactItem(

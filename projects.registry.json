@@ -41,7 +41,7 @@
     {
       "id": "dotnet",
       "marker": ".csproj",
-      "markersSuffix": [".sln"],
+      "markersSuffix": [".csproj", ".sln"],
       "artifacts": [
         { "path": "bin", "regenerate": "dotnet build" },
         { "path": "obj", "regenerate": "dotnet build" }

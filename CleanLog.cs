@@ -35,7 +35,7 @@ public static class CleanLog
         };
         foreach (var item in items)
         {
-            lines.Add($"  {CacheScanner.FormatSize(item.SizeBytes),12}  [{item.Risk}]  {item.Name}  ->  {item.Path}");
+            lines.Add($"  {CacheScanner.FormatSize(item.SizeBytes),12}  [{item.Risk}]  {item.Name}  ->  {item.Path}{(item.SizeIncomplete ? "（统计不完整）" : "")}");
         }
         Write(lines);
     }
