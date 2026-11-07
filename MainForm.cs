@@ -347,6 +347,8 @@ public class MainForm : Form
         colRisk.HeaderText = "风险";
         dgv.Columns.AddRange([colCheck, colName, colSize, colDesc, colRisk, colResult, colPath]);
         dgv.CellContentClick += Dgv_CellContentClick;
+        dgv.CellMouseClick += Dgv_CellMouseClick;
+        dgv.CurrentCellDirtyStateChanged += Dgv_CurrentCellDirtyStateChanged;
         dgv.CellFormatting += Dgv_CellFormatting;
         dgv.CellPainting += Dgv_CellPainting;
         dgv.CellMouseEnter += Dgv_CellMouseEnter;
@@ -574,6 +576,40 @@ public class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// 点击勾选列任意位置（而非仅 16px 复选框图形）都能切换：点在图形上控件已自行翻转并
+    /// 进入编辑态（MouseClick 时可检测），点在单元格空白处由此处手动翻转。
+    /// 只读报告项给出状态区提示而非无响应。
+    /// </summary>
+    private void Dgv_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left || e.RowIndex < 0 || e.ColumnIndex < 0) return;
+        if (dgv.Columns[e.ColumnIndex].Name != "Checked") return;
+
+        var cell = dgv[e.ColumnIndex, e.RowIndex];
+        if (cell.ReadOnly)
+        {
+            lblStateDetail.Text = $"「{dgv.Rows[e.RowIndex].Cells["Name"].Value}」为只读报告项，工具不代为清理（见说明列）";
+            LayoutStatusArea(_statusArea);
+            return;
+        }
+
+        bool toggledByControl = ReferenceEquals(dgv.CurrentCell, cell) && dgv.IsCurrentCellInEditMode;
+        if (!toggledByControl)
+        {
+            cell.Value = cell.Value is not true;
+            dgv.EndEdit();
+            UpdateSelected();
+        }
+    }
+
+    /// <summary>勾选值即时提交：不点击其他单元格之前，“清理选中”读到的一直是最新勾选状态</summary>
+    private void Dgv_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
+    {
+        if (dgv.IsCurrentCellDirty && dgv.CurrentCell is DataGridViewCheckBoxCell)
+            dgv.CommitEdit(DataGridViewDataErrorContexts.Commit);
+    }
+
     private void Dgv_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
         if (e.RowIndex < 0) return;
@@ -766,7 +802,11 @@ public class MainForm : Form
             dgv.Rows[rowIdx].Cells["Result"].Value = "统计不完整";
             dgv.Rows[rowIdx].Cells["Size"].ToolTipText = "部分子目录无法读取，当前大小为可读取部分。";
         }
-        if (!CacheScanner.CanClean(item)) dgv.Rows[rowIdx].Cells["Checked"].ReadOnly = true;
+        if (!CacheScanner.CanClean(item))
+        {
+            dgv.Rows[rowIdx].Cells["Checked"].ReadOnly = true;
+            dgv.Rows[rowIdx].Cells["Checked"].ToolTipText = "只读报告项：工具仅统计占用，不代为清理";
+        }
 
         // 自动发现项文字降一档（信息权重：已知规则优先）
         if (!isKnown)

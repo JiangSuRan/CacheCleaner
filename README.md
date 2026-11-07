@@ -11,10 +11,10 @@
 [![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](https://github.com/JiangSuRan/CacheCleaner/releases)
 [![License](https://img.shields.io/badge/License-MIT-green)](#-许可证)
 
-[![Rules](https://img.shields.io/badge/%E7%94%9F%E6%95%88%E8%A7%84%E5%88%99-87%E6%9D%A1-teal)](#-核心能力)
+[![Rules](https://img.shields.io/badge/%E7%94%9F%E6%95%88%E8%A7%84%E5%88%99-120%E6%9D%A1-teal)](#-核心能力)
 [![Agents](https://img.shields.io/badge/Agent%E6%94%B6%E5%BD%95-18%E4%B8%AA-blue)](#-agent-收录目录)
 [![Artifacts](https://img.shields.io/badge/%E5%8F%AF%E5%86%8D%E7%94%9F%E4%BA%A7%E7%89%A9-26%E9%A1%B9-orange)](#-核心能力)
-[![Tests](https://img.shields.io/badge/%E5%9B%9E%E5%BD%92%E6%B5%8B%E8%AF%95-15%E9%A1%B9%E9%80%9A%E8%BF%87-success)](tests/Regression/)
+[![Tests](https://img.shields.io/badge/%E5%9B%9E%E5%BD%92%E6%B5%8B%E8%AF%95-391%E9%A1%B9%E9%80%9A%E8%BF%87-success)](tests/Regression/)
 
 *自包含单文件 · 免安装 · 零依赖 · 数据安全优先 · 全程可审计*
 
@@ -28,20 +28,20 @@
 
 AI agent 与 CLI 的普及，让开发者的磁盘出现了一代传统清理工具完全不认识的新膨胀源：**会话转录**只进不出、**模型权重**动辄数十 GB、**自更新**堆积旧版本、**内容寻址存储**设计上只增不减，每个工具还要在家目录圈一块 dot-home。社区已经大量报障——`~/.claude` 涨到 3.6 GB 的 issue、Cursor「清缓存」误删 300 GB 的事故——一个不懂语义的清理器，要么不敢删，要么删错。
 
-CacheCleaner 的答案是一套**带安全语义的规则引擎**：87 条生效规则覆盖六类位置，三级风险标注、进程守卫、预览模式、全程审计层层兜底，并把收录工作沉淀为可持续维护的 **Agent 收录目录**——**已知全自动，未知看得见**。
+CacheCleaner 的答案是一套**带安全语义的规则引擎**：120 条生效规则覆盖六类位置，三级风险标注、进程守卫、预览模式、全程审计层层兜底，并把收录工作沉淀为可持续维护的 **Agent 收录目录**——**已知全自动，未知看得见**。
 
 ## 🎯 核心能力
 
 | 能力 | 说明 |
 |---|---|
-| 🔍 **三阶段智能扫描** | 秒级扫描 70+ 内置规则位置，随后自动遍历用户目录发现未知应用的缓存（支持 `.cache` / `.tmp` / `.logs` 点目录），最后枚举项目工程的可再生产物，并按「目录是否存在」自动显隐 |
+| 🔍 **三阶段智能扫描** | 秒级扫描 88 条内置规则位置，随后自动遍历用户目录发现未知应用的缓存（支持 `.cache` / `.tmp` / `.logs` 点目录），最后枚举项目工程的可再生产物，并按「目录是否存在」自动显隐 |
 | 🛡️ **三级安全防护** | 安全 / 注意 / 危险三级风险标注；路径安全校验 + 系统级精确白名单；`guardProcesses` 进程守卫——浏览器、微信运行中自动跳过对应缓存项并记入日志 |
 | 👁️ **预览模式** | 只统计将释放的量，不删除任何文件、不执行任何命令、不改动服务状态——先看账单，再动手 |
 | 📊 **效果可观测** | 清理汇总以**磁盘可用空间差**为准（拒绝纸面数字）；逐项释放量与失败明细（被占用/权限不足的具体路径）落盘审计日志 |
 | ♻️ **可靠清理管线** | 命令式清理并行读取输出、限时轮询、随时可取消——系统维护进程（DISM 等）保留后台自行结束，绝不误杀；逐项「处理结果」列（成功/失败/跳过/待重启），清理后核实**真实残留大小**，单项失败不中断，任何结束方式都写入审计汇总 |
 | 📈 **增长分析** | 按「最后写入时间」找出最近 3/7/14 天新写入的大文件排行，直接回答「**谁在吃我的盘**」；命中可迁盘的大缓存时给出**迁盘顾问**命令 |
 | 💽 **全盘占用扫描** | 「更多工具」从系统盘根或任意目录统计所有可访问子目录，不限大小与层数；双击逐层下钻、大文件前 100 项、随时取消——只分析占用，不动任何文件 |
-| 🧩 **JSON 规则引擎** | 71 条默认规则内嵌 + 16 条 Agent 目录编译，放一份 `rules.user.json` 即可增改，**无需重新编译**（对标 Winapp2.ini 的思路） |
+| 🧩 **JSON 规则引擎** | 88 条默认规则内嵌 + Agent 目录编译，放一份 `rules.user.json` 即可增改，**无需重新编译**（对标 Winapp2.ini 的思路） |
 | 🤖 **Agent 收录目录** | 18 个主流 agent 的收录清单（Claude Code / Codex / Gemini CLI / Qwen / OpenCode / Amazon Q / Goose / Crush / 通义灵码 / MarsCode 等），带探测签名、neverTouch 白名单、置信分级与核实日期 |
 | 🗺️ **未收录探测器** | 家目录下未被覆盖的大体积工具目录以「只报告不清理」列出——**已知全自动，未知看得见** |
 | 🖥️ **系统级瘦身** | 回收站、系统还原点（缩减上限保留最新）、WinSxS 组件存储（DISM）、Windows 升级残留（cleanmgr /autoclean）、Windows 更新缓存（自动停启服务） |
@@ -60,6 +60,16 @@ CacheCleaner 的答案是一套**带安全语义的规则引擎**：87 条生效
 6. **全程可审计** —— 每一次扫描与清理：逐项释放量、失败路径、磁盘净增，全部落盘可复盘
 
 ## 🚀 快速开始
+
+### v5.3：勾选交互修复与全面扫描升级（对标 BleachBit 规则库）
+
+- **勾选交互修复**：点击勾选列**任意位置**即可切换选中（此前必须精确点中 16px 复选框图形）；只读报告项点击时状态栏说明原因，悬浮提示同步——「选不中」从此有解释。
+- **浏览器缓存补全**：Default 配置文件的 Service Worker / Code Cache / GPUCache 等分层缓存（此前只扫 Profile N）、User Data 根级公共缓存（GrShaderCache / component_crx_cache / Crashpad 崩溃转储 / 内置 AI 模型缓存）、Firefox 离线缓存 / 跳转列表缓存 / 缩略图缓存。实测仅 Edge Default 的 Service Worker 缓存即可达数百 MB。
+- **系统与安全日志**：Defender 服务日志（MPLog）/ 定义备份 / 扫描历史、DISM / WindowsUpdate / MoSetup / SIH / Panther 安装日志族。
+- **用户级与驱动残留**：用户级错误报告（WER）、系统网络缓存（INetCache）、RDP 位图缓存、OneDrive 日志、NVIDIA / AMD 驱动安装解压残留（`C:\NVIDIA`、`C:\AMD`，常见 1-4 GB）。
+- **开发工具**：Yarn 缓存、Gradle 构建缓存、Discord / Slack 等 Electron 应用缓存子目录。
+- **散落孤儿临时文件深扫**：桌面 / 文档 / 下载 / 公共目录与系统盘根的 `~$*` Office 锁文件、`~wr*.tmp` 保存残片、Thumbs.db 等（只处理 2 天前的，打开中的文档锁文件自然被占用保护）。
+- **跨阶段去重**：规则项与过程扫描指向同一路径时只保留一份，规则优先。
 
 ### v5.2：全盘占用与更完整的清理
 
@@ -142,7 +152,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 
 ## 🏗️ 工程品质
 
-- 🧪 **回归测试套件** — [`tests/Regression`](tests/Regression/) 零框架依赖：覆盖双管道大量输出、超时与取消、预览零删除、真实删除、最近文件保留、失败后继续、残留大小计量、只读条目 UI 行为；真实删除仅作用于测试自建的随机目录，退出即清理
+- 🧪 **回归测试套件** — [`tests/Regression`](tests/Regression/) 零框架依赖：覆盖双管道大量输出、超时与取消、预览零删除、真实删除、最近文件保留、失败后继续、残留大小计量、只读条目 UI 行为，并对 120 条默认规则做全量合法性校验（名称唯一 / 路径 / 清理方式 / 规模基线）；真实删除仅作用于测试自建的随机目录，退出即清理
 - ⏱️ **性能对照** — [C# 优化与 Rust 只读原型实测](docs/performance/2026-10-15/README.md)：完整扫描中位耗时 10.89s → 6.69s（约 −38.6%），剩余量统计 126ms → 15ms；报告含阶段耗时、原始样本与可复测工具
 - 📦 **自包含单文件** — 一个 exe 内嵌 .NET 10 运行时与全部规则资产，拷贝即用，无需安装任何依赖
 - ✅ **零警告编译** — Release 构建 0 错误 / 0 警告
@@ -181,7 +191,7 @@ ISCC setup.iss
 ├── CleaningRules.cs       # JSON 规则加载器（内嵌默认 + 侧车覆盖 + 目录编译）
 ├── AgentCatalog.cs        # Agent 目录加载与编译器
 ├── ProjectRegistry.cs     # 项目工件注册表加载
-├── rules.default.json     # 内嵌声明式规则（71 条）
+├── rules.default.json     # 内嵌声明式规则（88 条）
 ├── agents.catalog.json    # Agent 收录目录（18 个 agent / 31 条编译条目）
 ├── projects.registry.json # 项目工件注册表（8 类项目 / 26 项可再生产物）
 ├── CleanLog.cs            # 清理审计日志
@@ -214,10 +224,10 @@ ISCC setup.iss
 [![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](https://github.com/JiangSuRan/CacheCleaner/releases)
 [![License](https://img.shields.io/badge/License-MIT-green)](#-license--许可证)
 
-[![Rules](https://img.shields.io/badge/Rules-87-teal)](#-core-capabilities)
+[![Rules](https://img.shields.io/badge/Rules-120-teal)](#-core-capabilities)
 [![Agents](https://img.shields.io/badge/Agents-18-blue)](#-agent-catalog)
 [![Artifacts](https://img.shields.io/badge/Reproducible_artifacts-26-orange)](#-core-capabilities)
-[![Tests](https://img.shields.io/badge/Regression_tests-15_passing-success)](tests/Regression/)
+[![Tests](https://img.shields.io/badge/Regression_tests-391_passing-success)](tests/Regression/)
 
 *Self-contained single file · Portable · Zero dependencies · Safety first · Fully auditable*
 
@@ -231,13 +241,13 @@ ISCC setup.iss
 
 The rise of AI agents and CLIs has created a generation of disk bloat that traditional cleaners simply don't understand: **session transcripts** that only grow, **model weights** weighing tens of GB, **self-updates** piling up old versions, **content-addressable stores** designed to never shrink — and every tool claiming its own dot-home in your user profile. The community has reported it at scale: issues of `~/.claude` reaching 3.6 GB, and the Cursor "clean cache" incident that wiped 300 GB. A cleaner that doesn't understand semantics either deletes nothing — or deletes the wrong things.
 
-CacheCleaner's answer is a **semantics-aware rule engine**: 87 effective rules across six location classes, backed by three-tier risk labels, process guards, preview mode and end-to-end auditing — with curation maintained as a sustainable **agent catalog**. Known locations are handled automatically; unknown ones stay visible.
+CacheCleaner's answer is a **semantics-aware rule engine**: 120 effective rules across six location classes, backed by three-tier risk labels, process guards, preview mode and end-to-end auditing — with curation maintained as a sustainable **agent catalog**. Known locations are handled automatically; unknown ones stay visible.
 
 ## 🎯 Core Capabilities
 
 | Capability | Description |
 |---|---|
-| 🔍 **Three-phase smart scan** | Scans 70+ built-in rule locations in seconds, then walks the user profile to discover caches of unknown apps (supports `.cache` / `.tmp` / `.logs` dot-directories), and finally enumerates reproducible project artifacts — items hide themselves when a path doesn't exist |
+| 🔍 **Three-phase smart scan** | Scans 88 built-in rule locations in seconds, then walks the user profile to discover caches of unknown apps (supports `.cache` / `.tmp` / `.logs` dot-directories), and finally enumerates reproducible project artifacts — items hide themselves when a path doesn't exist |
 | 🛡️ **Three-tier safety** | Safe / caution / danger risk labels; path validation + system-level exact whitelists; per-rule `guardProcesses` — browser and WeChat caches are skipped while those apps run, and every skip is logged |
 | 👁️ **Preview mode** | Only measures what would be freed — deletes no files, runs no commands, touches no service state. See the bill before you pay it |
 | 📊 **Real observability** | Cleanup summaries are based on the **free-space delta** (no paper numbers); per-item freed amounts and failure details (the exact occupied or unauthorized paths) land in audit logs |
@@ -263,6 +273,16 @@ CacheCleaner's answer is a **semantics-aware rule engine**: 87 effective rules a
 6. **Everything audited** — every scan and cleanup: per-item freed amounts, failed paths, net disk delta — all on disk for review
 
 ## 🚀 Quick Start
+
+### v5.3: Checkbox interaction fix & comprehensive scan upgrade (aligned with BleachBit's rule library)
+
+- **Checkbox fix**: clicking anywhere in the checkbox column now toggles selection (previously you had to hit the 16px glyph exactly); read-only report items explain themselves in the status bar and tooltip when clicked.
+- **Browser caches completed**: layered caches inside the Default profile (Service Worker / Code Cache / GPUCache — previously only Profile N was scanned), User-Data-root shared caches (GrShaderCache / component_crx_cache / Crashpad / built-in AI model caches), and Firefox offline / jump-list / thumbnail caches. In real-world testing the Service Worker cache of a single Edge Default profile can reach hundreds of MB.
+- **System & security logs**: Defender service logs (MPLog), definition backups and scan history; DISM / WindowsUpdate / MoSetup / SIH / Panther setup-log family.
+- **User-level & driver leftovers**: per-user WER, INetCache, RDP bitmap cache, OneDrive logs, and NVIDIA / AMD driver-extraction leftovers (`C:\NVIDIA`, `C:\AMD` — commonly 1-4 GB).
+- **Dev tools**: Yarn cache, Gradle build cache, and Electron-app cache subdirectories such as Discord and Slack.
+- **Orphan temp-file deep scan**: `~$*` Office lock files, `~wr*.tmp` save fragments and Thumbs.db scattered across Desktop / Documents / Downloads / Public and the drive root (only files older than 2 days; lock files of open documents are naturally protected by sharing violations).
+- **Cross-stage dedup**: when a rule and a procedural scanner point to the same path, only one entry remains — rules win.
 
 ### v5.2: Whole-disk usage & more complete cleanup
 
@@ -345,7 +365,7 @@ Issues contributing evidence for new agents (with official docs or source links)
 
 ## 🏗️ Engineering Quality
 
-- 🧪 **Regression suite** — [`tests/Regression`](tests/Regression/) with zero framework dependencies: parallel pipes under heavy output, timeout, cancellation, preview deleting nothing, real deletion, recent-file retention, continue-on-failure, leftover-size accounting and read-only UI behavior; real deletion only targets random directories the suite creates itself
+- 🧪 **Regression suite** — [`tests/Regression`](tests/Regression/) with zero framework dependencies: parallel pipes under heavy output, timeout, cancellation, preview deleting nothing, real deletion, recent-file retention, continue-on-failure, leftover-size accounting and read-only UI behavior, plus a full legality validation of all 120 default rules (unique names / paths / clean modes / scale baseline); real deletion only targets random directories the suite creates itself
 - ⏱️ **Performance comparison** — [C# optimizations vs. a read-only Rust prototype](docs/performance/2026-10-15/README.md): full-scan median 10.89s → 6.69s (≈ −38.6%), leftover measurement 126ms → 15ms; stage timings, raw samples and reproducible tools included
 - 📦 **Self-contained single file** — one exe embeds the .NET 10 runtime and all rule assets; copy and run
 - ✅ **Zero-warning builds** — Release builds with 0 errors / 0 warnings

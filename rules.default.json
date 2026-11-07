@@ -535,5 +535,139 @@
     "desc": "组件存储，DISM 清理被取代的旧组件（15-30 分钟）",
     "risk": "warn",
     "skipSize": true
+  },
+  {
+    "name": "Defender 服务日志",
+    "base": "programData",
+    "path": "Microsoft\\Windows Defender\\Support",
+    "desc": "Defender 的 MPLog/MPDetection 日志（活跃日志被占用时自动跳过）",
+    "risk": "warn",
+    "clean": "files",
+    "filesPatterns": [
+      "MPLog-*.log",
+      "MPDetection-*.log"
+    ]
+  },
+  {
+    "name": "Defender 扫描历史",
+    "base": "programData",
+    "path": "Microsoft\\Windows Defender\\Scans\\History\\Results",
+    "desc": "Defender 扫描结果历史（Quick/Resource 检测结果记录）",
+    "risk": "warn"
+  },
+  {
+    "name": "Defender 定义备份",
+    "base": "programData",
+    "path": "Microsoft\\Windows Defender\\Definition Updates\\Backup",
+    "desc": "旧版本病毒定义的回滚备份，删除后不能回退旧定义",
+    "risk": "warn"
+  },
+  {
+    "name": "DISM 日志",
+    "base": "windows",
+    "path": "Logs\\DISM",
+    "desc": "DISM 组件维护日志（dism.log 等）",
+    "risk": "safe",
+    "clean": "files",
+    "filesPatterns": [
+      "*.log"
+    ]
+  },
+  {
+    "name": "Windows 更新日志",
+    "base": "windows",
+    "path": "Logs\\WindowsUpdate",
+    "desc": "Windows 更新客户端日志",
+    "risk": "safe"
+  },
+  {
+    "name": "MoSetup 日志",
+    "base": "windows",
+    "path": "Logs\\MoSetup",
+    "desc": "Windows 功能升级（setuphost）安装日志",
+    "risk": "safe"
+  },
+  {
+    "name": "SIH 日志",
+    "base": "windows",
+    "path": "Logs\\SIH",
+    "desc": "软件安装程序维护（SIH）日志",
+    "risk": "safe"
+  },
+  {
+    "name": "Windows 安装日志 (Panther)",
+    "base": "windows",
+    "path": "Panther",
+    "desc": "系统安装/升级阶段日志（排查安装故障时有参考价值）",
+    "risk": "warn"
+  },
+  {
+    "name": "用户级错误报告",
+    "base": "localAppData",
+    "path": "Microsoft\\Windows\\WER",
+    "desc": "当前用户的 Windows 错误报告（ReportArchive/ReportQueue）",
+    "risk": "safe"
+  },
+  {
+    "name": "系统网络缓存 (INetCache)",
+    "base": "localAppData",
+    "path": "Microsoft\\Windows\\INetCache",
+    "desc": "系统组件的 WinINet 缓存（含 Low 完整性副本，部分需系统自动重建）",
+    "risk": "safe"
+  },
+  {
+    "name": "RDP 位图缓存",
+    "base": "localAppData",
+    "path": "Microsoft\\Terminal Server Client\\Cache",
+    "desc": "远程桌面连接的位图缓存，清理后自动重建",
+    "risk": "safe"
+  },
+  {
+    "name": "OneDrive 日志",
+    "base": "localAppData",
+    "path": "Microsoft\\OneDrive\\logs",
+    "desc": "OneDrive 同步客户端日志（OneDrive 运行中自动跳过）",
+    "risk": "safe",
+    "guardProcesses": [
+      "OneDrive"
+    ]
+  },
+  {
+    "name": "Yarn 缓存",
+    "base": "localAppData",
+    "path": "Yarn\\Cache",
+    "desc": "Yarn 包缓存，清理后按需重新下载",
+    "risk": "safe"
+  },
+  {
+    "name": "Gradle 构建缓存",
+    "base": "userProfile",
+    "path": ".gradle\\caches",
+    "desc": "Gradle 构建与依赖缓存，下次构建自动重建（首次构建变慢）",
+    "risk": "safe"
+  },
+  {
+    "name": "Steam 页面缓存",
+    "base": "localAppData",
+    "path": "Steam\\htmlcache",
+    "desc": "Steam 客户端内嵌浏览器缓存（Steam 运行中自动跳过）",
+    "risk": "safe",
+    "guardProcesses": [
+      "steam"
+    ]
+  },
+  {
+    "name": "NVIDIA 驱动解压残留",
+    "base": "driveRoot",
+    "path": "NVIDIA",
+    "desc": "驱动安装包解压临时目录（C:\\NVIDIA，驱动装完即可删；重装驱动时需重新解压）",
+    "risk": "warn"
+  },
+  {
+    "name": "AMD 驱动解压残留",
+    "base": "driveRoot",
+    "path": "AMD",
+    "desc": "AMD 驱动/显卡软件解压临时目录（C:\\AMD，安装完成后可删）",
+    "risk": "warn"
   }
 ]

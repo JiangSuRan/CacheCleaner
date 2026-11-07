@@ -375,6 +375,25 @@ public static class CacheScanner
         ScanDiagnostics.NextStage("ScanProjectArtifacts");
         ScanProjectArtifacts(items, ctx, progress, ref current, ref total, cancellationToken);
 
+        // 散落孤儿临时文件（~$ Office 锁文件 / Thumbs.db 等，对齐 BleachBit deepscan）
+        ScanDiagnostics.NextStage("ScanOrphanTempFiles");
+        ScanOrphanTempFiles(items, progress, ref current, ref total, cancellationToken);
+
+        // 跨阶段按路径去重：保留首次出现者（规则项先入列表所以优先，如规则「Chrome 缓存」
+        // 优先于 Profile 扫描生成的同一路径），命令式占位项不参与
+        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < items.Count; )
+        {
+            var it = items[i];
+            if (!it.Exists || string.IsNullOrEmpty(it.Path) || it.Path.StartsWith("（命令式清理）", StringComparison.Ordinal))
+            { i++; continue; }
+            string key;
+            try { key = Path.GetFullPath(it.Path).TrimEnd('\\'); }
+            catch { i++; continue; }
+            if (seenPaths.Add(key)) i++;
+            else items.RemoveAt(i);
+        }
+
         return items;
     }
 
@@ -574,6 +593,10 @@ public static class CacheScanner
         // 遗留追踪会话：停止 WPR/手动内核追踪，终止持续写盘
         if (item.Name == "遗留性能追踪会话")
             return CleanLeftoverTraces();
+
+        // 散落孤儿临时文件：按固定根集合重扫删除（Path 为命令式占位）
+        if (item.Name == "散落临时文件")
+            return CleanOrphanTempFiles(cancellationToken);
 
         // 未收录工具目录：仅报告占用，语义确认前绝不清理
         if (item.Name.StartsWith("未收录工具目录"))
@@ -1000,10 +1023,12 @@ public static class CacheScanner
         "Cache", "Code Cache", "GPUCache",
         "DawnCache", "DawnWebGPUCache", "DawnGraphiteCache", "GraphiteDawnCache",
         "GrShaderCache", "ShaderCache",
-        "gecko_cache", "extensions_crx_cache",
+        "gecko_cache", "extensions_crx_cache", "component_crx_cache",
         "CachedData",                  // Electron/VS Code 的 V8 代码缓存，可重建
         "CachedExtensionVSIXs",        // 扩展更新安装包缓存，只进不出（实测可达数 GB）
-        "CacheStorage", "ScriptCache"   // 位于 Service Worker 下，只清这两类，绝不动 Database（会丢 PWA 登录）
+        "CacheStorage", "ScriptCache", // 位于 Service Worker 下，只清这两类，绝不动 Database（会丢 PWA 登录）
+        "Crashpad",                    // 崩溃转储数据库（reports/completed），可重建
+        "OnDeviceHeadSuggestModel", "OptGuideOnDeviceModel"  // 浏览器内置 AI 模型缓存，可上 GB，按需重新下载
     };
 
     // 缓存子目录 → 展示名后缀
@@ -1016,8 +1041,10 @@ public static class CacheScanner
         "scriptcache" => "SW 脚本缓存",
         "grshadercache" or "shadercache" => "着色器缓存",
         "gecko_cache" => "Gecko 缓存",
-        "extensions_crx_cache" or "cachedextensionvsixs" => "扩展包缓存",
+        "extensions_crx_cache" or "component_crx_cache" or "cachedextensionvsixs" => "扩展包缓存",
         "cacheddata" => "数据缓存",
+        "crashpad" => "崩溃转储",
+        "ondeviceheadsuggestmodel" or "optguideondevicemodel" => "内置AI模型",
         "hot_fix" => "热更新缓存",
         _ => "缓存"
     };
@@ -1091,8 +1118,10 @@ public static class CacheScanner
     }
 
     /// <summary>
-    /// 扫描 Edge/Chrome 的多 Profile 缓存。
-    /// 已知项只覆盖 Default Profile；多账号用户的 Profile 1/2/3... 是常见盲区。
+    /// 扫描 Edge/Chrome 系浏览器的缓存：
+    /// - User Data 根级公共缓存（GrShaderCache/component_crx_cache/Crashpad/内置AI模型等）；
+    /// - 各 Profile（Default 与 Profile 1/2/3...）内的分层缓存（Code Cache/GPUCache/SW 缓存等）。
+    /// 已知规则只覆盖 Default\Cache 一条路径，Profile 内其余分层与根级目录均为常见盲区。
     /// 每个 Profile 只报告纯缓存子目录，绝不报告 Profile 目录本身（会删掉登录态）。
     /// </summary>
     private static void ScanBrowserProfileCaches(
@@ -1119,11 +1148,18 @@ public static class CacheScanner
 
             try
             {
-                // 仅 Profile N 目录；Default 已在 KnownCaches 覆盖，Guest/System Profile 不含用户缓存
-                foreach (var profileDir in Directory.GetDirectories(userDataDir, "Profile *"))
+                // User Data 根级公共缓存目录（跨 Profile 共享，不进任何 Profile）
+                ScanChromiumCacheSubDirs(items, userDataDir, label,
+                    progress, ref current, ref total, cancellationToken, onlyRootLevel: true);
+
+                // Default 与 Profile N：与规则里 Default\Cache 重复的项由 ScanAll 末尾按路径去重
+                foreach (var profileDir in Directory.GetDirectories(userDataDir, "*"))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var profileName = Path.GetFileName(profileDir);
+                    if (!profileName.Equals("Default", StringComparison.OrdinalIgnoreCase)
+                        && !profileName.StartsWith("Profile ", StringComparison.OrdinalIgnoreCase))
+                        continue;
                     ScanChromiumCacheSubDirs(items, profileDir, $"{label} {profileName}",
                         progress, ref current, ref total, cancellationToken);
                 }
@@ -1213,8 +1249,9 @@ public static class CacheScanner
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         var swName = Path.GetFileName(swSub);
+                        // suffix 已带 SW 前缀（SW 缓存/SW 脚本缓存），label 不再追加避免「SW SW」
                         if (ChromiumCacheDirNames.Contains(swName))
-                            AddProfileCacheItem(items, swSub, $"{label} SW", swName, progress, ref current, ref total);
+                            AddProfileCacheItem(items, swSub, label, swName, progress, ref current, ref total);
                     }
                 }
             }
@@ -1270,6 +1307,8 @@ public static class CacheScanner
             ("Claude", "Claude Desktop", false),
             ("Windsurf", "Windsurf", false),
             ("LarkShell", "飞书", true),
+            ("discord", "Discord", false),
+            ("Slack", "Slack", false),
         ];
 
         /// <summary>
@@ -1295,7 +1334,8 @@ public static class CacheScanner
         }
 
         /// <summary>
-        /// 扫描 Firefox 各 Profile 的磁盘缓存（cache2，与登录态/书签无关）
+        /// 扫描 Firefox 各 Profile 的磁盘缓存（cache2/OfflineCache/jumpListCache/thumbnails，
+        /// 与登录态/书签无关；路径对齐 BleachBit firefox.xml）
         /// </summary>
         private static void ScanFirefoxCaches(
             List<CacheItem> items,
@@ -1308,30 +1348,43 @@ public static class CacheScanner
             var profilesRoot = Path.Combine(ctx.LocalAppData, @"Mozilla\Firefox\Profiles");
             if (!Directory.Exists(profilesRoot)) return;
 
+            var cacheKinds = new (string Dir, string Suffix, string Desc)[]
+            {
+                ("cache2", "缓存", "Firefox 磁盘缓存"),
+                ("OfflineCache", "离线缓存", "Firefox 离线应用缓存（appCache）"),
+                ("jumpListCache", "跳转列表缓存", "Firefox 任务栏跳转列表图标缓存"),
+                ("thumbnails", "缩略图缓存", "Firefox 新标签页网站缩略图缓存")
+            };
+
             try
             {
                 foreach (var profile in Directory.GetDirectories(profilesRoot))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var cacheDir = Path.Combine(profile, "cache2");
-                    if (!Directory.Exists(cacheDir)) continue;
-
-                    long size = SumFiles(cacheDir);
-                    if (size < MinProfileCacheSize) continue;
-
-                    total++;
-                    current++;
                     var profileName = Path.GetFileName(profile);
-                    progress?.Report((current, total, $"Firefox {profileName}"));
-                    items.Add(new CacheItem
+
+                    foreach (var (dir, suffix, desc) in cacheKinds)
                     {
-                        Name = $"Firefox {profileName} 缓存",
-                        Path = cacheDir,
-                        Desc = "Firefox 磁盘缓存，清理后自动重建，不影响登录与书签",
-                        Risk = RiskLevel.Safe,
-                        Exists = true,
-                        SizeBytes = size
-                    });
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var cacheDir = Path.Combine(profile, dir);
+                        if (!Directory.Exists(cacheDir)) continue;
+
+                        long size = SumFiles(cacheDir);
+                        if (size < MinProfileCacheSize) continue;
+
+                        total++;
+                        current++;
+                        progress?.Report((current, total, $"Firefox {profileName} {suffix}"));
+                        items.Add(new CacheItem
+                        {
+                            Name = $"Firefox {profileName} {suffix}",
+                            Path = cacheDir,
+                            Desc = $"{desc}，清理后自动重建，不影响登录与书签",
+                            Risk = RiskLevel.Safe,
+                            Exists = true,
+                            SizeBytes = size
+                        });
+                    }
                 }
             }
             catch (OperationCanceledException) { throw; }
@@ -2048,6 +2101,141 @@ public static class CacheScanner
             else failed++;
         }
         return new CleanResult(0, stopped, 0, 0, failed, 0);
+    }
+
+    // 散落孤儿临时文件模式（对齐 BleachBit deepscan；剔除误报率高的 *.bak 与通用 *.tmp）
+    private static readonly string[] OrphanTempPatterns = ["~$*", "~wr*.tmp", "ppt*.tmp", "Thumbs.db", ".DS_Store"];
+
+    // 孤儿文件的处理下限：只清理早于该天数的文件，文档打开中的活跃锁文件自然被排除
+    private const int OrphanMinAgeDays = 2;
+
+    [DllImport("shell32.dll")]
+    private static extern int SHGetKnownFolderPath(ref Guid rfid, uint dwFlags, IntPtr hToken, out IntPtr ppszPath);
+
+    /// <summary>下载目录（SpecialFolder 无对应枚举，走 KnownFolder GUID）</summary>
+    private static string? GetDownloadsFolder()
+    {
+        var guid = new Guid("374DE290-123F-4565-9164-39C4925E467B");
+        try
+        {
+            if (SHGetKnownFolderPath(ref guid, 0, IntPtr.Zero, out var ptr) == 0)
+            {
+                var path = Marshal.PtrToStringUni(ptr);
+                Marshal.FreeCoTaskMem(ptr);
+                return string.IsNullOrEmpty(path) ? null : path;
+            }
+        }
+        catch (Exception ex) { Debug.WriteLine($"获取下载目录失败: {ex.Message}"); }
+        return null;
+    }
+
+    /// <summary>
+    /// 孤儿临时文件的扫描根：用户文档区（桌面/文档/下载/图片/音乐/视频）、
+    /// 公共目录与系统盘根。~$*（Office 锁文件）、~wr*.tmp（Word 保存残片）、Thumbs.db
+    /// 散落在普通目录中，目录名不含 cache/temp，其他扫描阶段全部无法命中。
+    /// </summary>
+    private static IEnumerable<string> OrphanScanRoots()
+    {
+        foreach (var path in new[]
+                 {
+                     Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                     GetDownloadsFolder(),
+                     Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+                     Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
+                     Environment.GetFolderPath(Environment.SpecialFolder.MyVideos)
+                 })
+        {
+            if (!string.IsNullOrEmpty(path) && Directory.Exists(path)) yield return path;
+        }
+        var publicRoot = Path.Combine(SysRoot, "Users", "Public");
+        if (Directory.Exists(publicRoot)) yield return publicRoot;
+        yield return SysRoot.TrimEnd('\\');   // 系统盘根：仅顶层文件，不递归
+    }
+
+    /// <summary>
+    /// 扫描散落孤儿临时文件，聚合为单条目（统计仅计超过 OrphanMinAgeDays 的文件，与清理口径一致）
+    /// </summary>
+    private static void ScanOrphanTempFiles(
+        List<CacheItem> items,
+        IProgress<(int current, int total, string name)>? progress,
+        ref int current,
+        ref int total,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        long size = 0;
+        int count = 0;
+        var cutoff = DateTime.Now.AddDays(-OrphanMinAgeDays);
+        var sysRootNorm = SysRoot.TrimEnd('\\');
+
+        foreach (var root in OrphanScanRoots())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            bool topOnly = root.Equals(sysRootNorm, StringComparison.OrdinalIgnoreCase);
+            foreach (var pattern in OrphanTempPatterns)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                IEnumerator<string>? files = null;
+                try
+                {
+                    files = Directory.EnumerateFiles(root, pattern,
+                        topOnly ? SearchOption.TopDirectoryOnly : SearchOption.AllDirectories).GetEnumerator();
+                }
+                catch (IOException) { continue; }
+                catch (UnauthorizedAccessException) { continue; }
+
+                using (files)
+                {
+                    while (true)
+                    {
+                        try
+                        {
+                            if (!files.MoveNext()) break;
+                            var info = new FileInfo(files.Current);
+                            if (info.LastWriteTime >= cutoff) continue;
+                            size += info.Length;
+                            count++;
+                        }
+                        catch (IOException) { break; }
+                        catch (UnauthorizedAccessException) { break; }
+                    }
+                }
+            }
+        }
+
+        if (count == 0) return;
+
+        total++;
+        current++;
+        progress?.Report((current, total, "散落临时文件"));
+        items.Add(new CacheItem
+        {
+            Name = "散落临时文件",
+            Path = "（命令式清理）",
+            Desc = $"桌面/文档/下载等处散落的 ~$ Office 锁文件、~wr*.tmp、Thumbs.db 等孤儿文件 {count} 个（仅处理 {OrphanMinAgeDays} 天前的）",
+            Risk = RiskLevel.Warn,
+            Exists = true,
+            SizeBytes = size
+        });
+    }
+
+    /// <summary>
+    /// 清理散落孤儿临时文件：按固定根集合重扫（系统盘根仅顶层），仅删超过 OrphanMinAgeDays 的文件。
+    /// 正被占用的活跃锁文件删除失败计入「占用」，不会影响打开中的文档。
+    /// </summary>
+    private static CleanResult CleanOrphanTempFiles(CancellationToken cancellationToken)
+    {
+        var sysRootNorm = SysRoot.TrimEnd('\\');
+        CleanResult total = default;
+        foreach (var root in OrphanScanRoots())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            bool topOnly = root.Equals(sysRootNorm, StringComparison.OrdinalIgnoreCase);
+            foreach (var pattern in OrphanTempPatterns)
+                total += CleanOldFiles(root, pattern, OrphanMinAgeDays, recursive: !topOnly, cancellationToken);
+        }
+        return total;
     }
 
     /// <summary>

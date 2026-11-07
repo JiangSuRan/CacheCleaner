@@ -132,6 +132,7 @@ class Regression
             Assert(!CacheScanner.CanClean(report) && CacheScanner.CleanItem(report).SkippedCount == 1 && File.Exists(protectedFile),"只读报告不可清理且明确跳过");
             TestProjectMarkers(fixtures);
             TestCoverage(fixtures);
+            TestRules();
             Console.WriteLine("REGRESSION_OK"); return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
@@ -141,6 +142,28 @@ class Regression
             foreach(var file in Directory.EnumerateFiles(fixtures,"*",SearchOption.AllDirectories)) File.SetAttributes(file,FileAttributes.Normal);
             Directory.Delete(fixtures,true);
         }
+    }
+    static void TestRules()
+    {
+        var rulesType = typeof(CacheScanner).Assembly.GetType("CacheCleaner.CleaningRules")!;
+        var all = (System.Collections.IEnumerable)rulesType.GetProperty("All",
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+        int count = 0;
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var rule in all)
+        {
+            count++;
+            var type = rule.GetType();
+            string name = (string)type.GetProperty("Name")!.GetValue(rule)!;
+            string kind = (string)type.GetProperty("Kind")!.GetValue(rule)!;
+            string path = (string)type.GetProperty("Path")!.GetValue(rule)!;
+            string clean = (string)type.GetProperty("Clean")!.GetValue(rule)!;
+            Assert(!string.IsNullOrWhiteSpace(name) && names.Add(name), $"规则名非空且唯一：{name}");
+            if (kind != "special") Assert(!string.IsNullOrWhiteSpace(path), $"非 special 规则有路径：{name}");
+            Assert(clean is "directory" or "files" or "reportOnly" or "command", $"清理方式合法：{name}");
+        }
+        Assert(count >= 75, $"规则库规模 {count} 条 ≥ 75（v5.3 扩充后基线）");
+        Console.WriteLine($"PASS 规则库 {count} 条全部合法");
     }
     static void TestCoverage(string fixtures)
     {
@@ -155,12 +178,22 @@ class Regression
             FileSystemRights.ListDirectory, AccessControlType.Deny));
         try
         {
-            info.SetAccessControl(deniedAcl);
-            Assert(CacheScanner.SumFiles(root) == 19, "不可读子目录不再导致整项统计归零");
-            var scan = Invoke("DiskUsageScanner", "Scan", root, null!, CancellationToken.None);
-            var node = scan.GetType().GetProperty("Root")!.GetValue(scan)!;
-            Assert((long)node.GetType().GetProperty("Bytes")!.GetValue(node)! == 19
-                && (int)node.GetType().GetProperty("Unreadable")!.GetValue(node)! > 0, "全盘扫描保留可读大小并报告不可读位置");
+            // Deny Everyone 的 ListDirectory 在提权进程下不生效（管理员读得到 blocked），
+            // 该两条断言仅在非提权环境有效
+            using (var identity = WindowsIdentity.GetCurrent())
+            {
+                bool elevated = new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+                if (elevated) Console.WriteLine("SKIP ACL 拒绝用例（管理员进程下 Deny ListDirectory 不生效）");
+                else
+                {
+                    info.SetAccessControl(deniedAcl);
+                    Assert(CacheScanner.SumFiles(root) == 19, "不可读子目录不再导致整项统计归零");
+                    var scan = Invoke("DiskUsageScanner", "Scan", root, null!, CancellationToken.None);
+                    var node = scan.GetType().GetProperty("Root")!.GetValue(scan)!;
+                    Assert((long)node.GetType().GetProperty("Bytes")!.GetValue(node)! == 19
+                        && (int)node.GetType().GetProperty("Unreadable")!.GetValue(node)! > 0, "全盘扫描保留可读大小并报告不可读位置");
+                }
+            }
         }
         finally
         {
