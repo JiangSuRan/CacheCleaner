@@ -113,3 +113,29 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 > ⑤ `pnpm store` 由裸删改官方 `pnpm store prune`，新增 `go clean -modcache`；
 > ⑥ `~/.cache` 兜底规则改 Warn（防误删其中的模型缓存）。
 > 竞品参照：zclean/Jharu/claude-code-cleaner 等 2026 年同类项目均 ≤100 星，CacheCleaner 的安全语义（三级风险+守卫+预览+审计）构成差异化。
+
+## 8. v5.4 覆盖盲区修补与增长诊断打通（2026-11-14）
+
+> 起因：实测「清理后 C 盘没效果」——泄漏在规则库之外（BaiduYunKernel 50 天 +3.7GB），
+> 且被安全策略排除的用户数据目录对用户完全不可见。三项全改：
+
+1. **rules.default.json +4 条**：
+   - `百度网盘加速缓存`（Safe，guardProcesses: BaiduNetdisk/BaiduNetdiskUnite/baidunetdiskhost）——
+     **定性修正**：§1 曾按 2026-09-25 快照把 `BaiduYunKernel` 归为「用户数据自然膨胀，只能迁盘」，
+     2026-11-14 实测其 6.45GB 全部是 `.accelerate`（P2P/CDN chunk + video_preload_dir，无任何
+     IndexedDB/登录态），纯可再生缓存，删除后网盘自动重建；
+   - `软件管家旧安装包`（Warn，file，`greencore\softmgr\secore\chrome.7z` 约 332MB；Chrome-bin 程序本体不动）；
+   - `飞书 aha 用户数据` / `Positron WebStorage 用户数据`（reportOnly）——§4 遗留的
+     「aha 含用户数据待核验」已核验（users 子目录=账号文档；WebStorage=origin 存储桶），
+     转为可见的只读报告项并进 PathProtection 保护。
+2. **ScanChromiumCacheSubDirs 通用数据目录报告**：白名单外子目录命中 `UserDataDirNames`
+   （IndexedDB/Local Storage/Session Storage/WebStorage/Database/users/aha 等）且 ≥100MB
+   （`MinUserDataReportSize`）时以 `「label 名（用户数据）」` 只读报告；`CanClean` 按后缀拦截，
+   覆盖浏览器 Profile/Electron/Doubao 全部调用点。
+3. **ScanGeminiOldVersions**：Gemini 桌面 Squirrel 式 `app-<ver>` 目录按版本号 keepNewest
+   （2026-11 实测 app-1.17.0/1.18.0 两个旧版本 750MB 可回收）；logs/Crashpad 不参与，
+   版本号解析失败的目录保守不删。
+4. **增长诊断打通**：GrowthDialog 新增「位置增长对比」Tab（24 个位置与 growth-baseline.ps1
+   的 $targets 一致，robocopy /L 测量，基线 JSON 同 schema 互认，>100 MB/天 标红）；
+   工具栏新增独立「增长诊断」按钮（原「更多工具」菜单里的「趋势分析」移除）；
+   清理完成汇总在「文件统计 ≥500MB 且磁盘净增 < 统计一半」时提示用增长诊断定位规则外泄漏。

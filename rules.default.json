@@ -669,5 +669,41 @@
     "path": "AMD",
     "desc": "AMD 驱动/显卡软件解压临时目录（C:\\AMD，安装完成后可删）",
     "risk": "warn"
+  },
+  {
+    "name": "百度网盘加速缓存",
+    "base": "appData",
+    "path": "baidu\\BaiduYunKernel\\.accelerate",
+    "desc": "P2P/CDN 加速与视频预加载缓存（2026-11 实测 6.4GB、50 天增长 3.7GB 的头号增长源），纯可再生：清理后网盘自动重建，不影响已下载文件与登录态；网盘运行中自动跳过",
+    "risk": "safe",
+    "guardProcesses": [
+      "BaiduNetdisk",
+      "BaiduNetdiskUnite",
+      "baidunetdiskhost"
+    ]
+  },
+  {
+    "name": "软件管家旧安装包",
+    "base": "appData",
+    "path": "greencore\\softmgr\\secore\\chrome.7z",
+    "kind": "file",
+    "desc": "软件管家内置浏览器的安装包残留（2024-10 后未更新，约 332MB），安装已完成可删；同目录 Chrome-bin 是程序本体，本工具不清理",
+    "risk": "warn"
+  },
+  {
+    "name": "飞书 aha 用户数据",
+    "base": "appData",
+    "path": "LarkShell\\aha",
+    "desc": "按账号存放的飞书文档/消息数据（users 子目录，约 1GB），只读报告：确认不需要后手动删除",
+    "risk": "warn",
+    "clean": "reportOnly"
+  },
+  {
+    "name": "Positron WebStorage 用户数据",
+    "base": "appData",
+    "path": "Positron\\WebStorage",
+    "desc": "origin 存储桶（IndexedDB/Local Storage，工作台与扩展状态），只读报告：删除会丢 IDE 本地状态",
+    "risk": "warn",
+    "clean": "reportOnly"
   }
 ]

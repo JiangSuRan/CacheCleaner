@@ -359,6 +359,10 @@ public static class CacheScanner
         ScanDiagnostics.NextStage("ScanCodexOldVersions");
         ScanCodexOldVersions(items, ctx, progress, ref current, ref total, cancellationToken);
 
+        // Gemini 桌面自更新遗留的旧版本目录（按版本号保留最新）
+        ScanDiagnostics.NextStage("ScanGeminiOldVersions");
+        ScanGeminiOldVersions(items, ctx, progress, ref current, ref total, cancellationToken);
+
         // 遗留性能追踪会话（WPR 录制/手动内核追踪），持续写盘的经典增长源
         ScanDiagnostics.NextStage("ScanLeftoverTraces");
         ScanLeftoverTraces(items, progress, ref current, ref total, cancellationToken);
@@ -570,6 +574,7 @@ public static class CacheScanner
     }
 
     public static bool CanClean(CacheItem item) => !item.Name.StartsWith("未收录工具目录", StringComparison.Ordinal)
+        && !item.Name.EndsWith("（用户数据）", StringComparison.Ordinal)
         && CleaningRules.Find(item.Name)?.Clean != "reportOnly";
 
     private static CleanResult CleanItemCore(CacheItem item, IProgress<string>? progress, CancellationToken cancellationToken)
@@ -624,6 +629,10 @@ public static class CacheScanner
         // AI CLI 自更新遗留目录（保留最新版本）；GitHub Desktop 旧版本走下方精确匹配
         if (item.Name.StartsWith("Codex") && item.Name.EndsWith(" 旧版本"))
             return CleanKeepNewest(item.Path, cancellationToken);
+
+        // Gemini 桌面自更新遗留目录（按版本号保留最新，logs/Crashpad 等非版本目录不参与）
+        if (item.Name == "Gemini 桌面 旧版本")
+            return CleanGeminiKeepNewest(item.Path, cancellationToken);
 
         // 规则驱动检查：进程守卫（浏览器/微信等运行中其缓存必然被锁，直接跳过并留痕）
         var rule = CleaningRules.Find(item.Name);
@@ -1052,6 +1061,17 @@ public static class CacheScanner
     // 单个缓存子目录的最低报告阈值：低于此值不值得在列表里占一行
     private const long MinProfileCacheSize = 10 * 1024 * 1024;
 
+    // Chromium/Electron 白名单之外属于「用户数据」的目录名（登录态/账号文档/扩展状态）：
+    // 命中即以只读报告展示，绝不自动清理——飞书 aha、Positron WebStorage 都是这里的实际案例
+    private static readonly HashSet<string> UserDataDirNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "IndexedDB", "Local Storage", "Session Storage", "WebStorage",
+        "Database", "databases", "blob_storage", "users", "aha"
+    };
+
+    // 白名单外的用户数据目录达到该体积才进只读报告，避免小目录刷屏
+    private const long MinUserDataReportSize = 100 * 1024 * 1024;
+
     /// <summary>
     /// 扫描 Adobe 全家桶的自动恢复快照（本次实测的最大盲区：
     /// Roaming\Adobe\* Settings\&lt;语言&gt;\[x64\]DataRecovery 下按会话堆积 .aishm 文档镜像，
@@ -1242,6 +1262,13 @@ public static class CacheScanner
                     continue;
                 }
 
+                // 白名单外的已知「用户数据」目录：只读报告（体积达标），让用户看见被安全策略挡住的大头
+                if (UserDataDirNames.Contains(subName))
+                {
+                    AddUserDataReportItem(items, subDir, label, subName, progress, ref current, ref total);
+                    continue;
+                }
+
                 // Service Worker 下只认 CacheStorage/ScriptCache，已在白名单内，此处进入下探
                 if (!onlyRootLevel && subName.Equals("Service Worker", StringComparison.OrdinalIgnoreCase))
                 {
@@ -1287,6 +1314,35 @@ public static class CacheScanner
             Path = cacheDir,
             Desc = "应用缓存子目录，清理后自动重建，不影响登录状态",
             Risk = RiskLevel.Safe,
+            Exists = true,
+            SizeBytes = size
+        });
+    }
+
+    /// <summary>
+    /// 白名单外的用户数据目录只读报告：体积达标才报（避免刷屏），绝不自动清理
+    /// </summary>
+    private static void AddUserDataReportItem(
+        List<CacheItem> items,
+        string dataDir,
+        string label,
+        string dirName,
+        IProgress<(int current, int total, string name)>? progress,
+        ref int current,
+        ref int total)
+    {
+        long size = SumFiles(dataDir);
+        if (size < MinUserDataReportSize) return;
+
+        total++;
+        current++;
+        progress?.Report((current, total, $"{label} {dirName}"));
+        items.Add(new CacheItem
+        {
+            Name = $"{label} {dirName}（用户数据）",
+            Path = dataDir,
+            Desc = "应用数据目录，含登录态/账号文档等用户数据，只读报告不清理；确认不需要后可手动删除",
+            Risk = RiskLevel.Warn,
             Exists = true,
             SizeBytes = size
         });
@@ -1574,6 +1630,72 @@ public static class CacheScanner
             if (!Directory.Exists(dirPath)) return default;
             return CleanVersionDirectories(new DirectoryInfo(dirPath).GetDirectories()
                 .OrderByDescending(d => d.LastWriteTime).Select(d => d.FullName).ToList(), cancellationToken);
+        }
+
+        /// <summary>
+        /// 扫描 Gemini 桌面应用自更新遗留的旧版本目录（Squirrel 式 app-&lt;主.次.修订&gt;，只进不出），
+        /// 按版本号保留最新；logs/Crashpad 等非版本目录与版本号解析失败的目录不参与。
+        /// </summary>
+        private static void ScanGeminiOldVersions(
+            List<CacheItem> items,
+            ScanContext ctx,
+            IProgress<(int current, int total, string name)>? progress,
+            ref int current,
+            ref int total,
+            CancellationToken cancellationToken)
+        {
+            var geminiRoot = Path.Combine(ctx.LocalAppData, @"Google\Gemini");
+            if (!Directory.Exists(geminiRoot)) return;
+
+            try
+            {
+                var versions = new DirectoryInfo(geminiRoot).GetDirectories("app-*")
+                    .Select(d => (Dir: d, Ver: Version.TryParse(d.Name["app-".Length..], out var v) ? v : null))
+                    .Where(t => t.Ver != null)
+                    .OrderByDescending(t => t.Ver)
+                    .ToList();
+                if (versions.Count <= 1) return;
+
+                cancellationToken.ThrowIfCancellationRequested();
+                long oldSize = 0;
+                for (int i = 1; i < versions.Count; i++) oldSize += SumFiles(versions[i].Dir.FullName);
+                if (oldSize < MinProfileCacheSize) return;
+
+                total++;
+                current++;
+                progress?.Report((current, total, "Gemini 桌面 旧版本"));
+                items.Add(new CacheItem
+                {
+                    Name = "Gemini 桌面 旧版本",
+                    Path = geminiRoot,
+                    Desc = "自更新遗留的旧版本目录（按版本号保留最新），清理后不影响使用",
+                    Risk = RiskLevel.Safe,
+                    Exists = true,
+                    SizeBytes = oldSize
+                });
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"扫描 Gemini 旧版本失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 删除 Gemini 桌面除最新版本外的 app-* 目录（版本号解析失败的保守不删）
+        /// </summary>
+        private static CleanResult CleanGeminiKeepNewest(string geminiRoot, CancellationToken cancellationToken)
+        {
+            if (!Directory.Exists(geminiRoot)) return default;
+            var oldVersions = new DirectoryInfo(geminiRoot).GetDirectories("app-*")
+                .Select(d => (Dir: d.FullName, Ver: Version.TryParse(d.Name["app-".Length..], out var v) ? v : null))
+                .Where(t => t.Ver != null)
+                .OrderByDescending(t => t.Ver)
+                .Skip(1)
+                .Select(t => t.Dir)
+                .ToList();
+            if (oldVersions.Count == 0) return default;
+            return CleanVersionDirectories(oldVersions, cancellationToken);
         }
 
     private static CleanResult CleanVersionDirectories(IReadOnlyList<string> versions, CancellationToken cancellationToken)

@@ -1,6 +1,6 @@
 [Setup]
 AppName=C盘缓存清理工具
-AppVersion=5.3.0
+AppVersion=5.4.0
 AppPublisher=CacheCleaner
 DefaultDirName={autopf}\CacheCleaner
 DefaultGroupName=C盘缓存清理工具

@@ -40,6 +40,7 @@ public class MainForm : Form
     private GradientButton btnSelectNone = null!;
     private GradientButton btnCancel = null!;
     private GradientButton btnTrend = null!;
+    private GradientButton btnGrowth = null!;
 
     // ---- 内容区控件 ----
     private AnimeDataGridView dgv = null!;
@@ -199,12 +200,14 @@ public class MainForm : Form
         btnSelectNone = MakeButton("取消选择", '\uE739', ButtonStyle.Ghost);
         btnCancel = MakeButton("取消扫描", '\uE711', ButtonStyle.Ghost);
         btnTrend = MakeButton("更多工具", '\uE9D2', ButtonStyle.Secondary);
+        btnGrowth = MakeButton("增长诊断", '\uE9D9', ButtonStyle.Secondary);
 
         btnScan.Click += BtnScan_Click;
         btnClean.Click += BtnClean_Click;
         btnSelectAll.Click += (_, _) => SetAllChecked(true);
         btnSelectNone.Click += (_, _) => SetAllChecked(false);
         btnCancel.Click += (_, _) => _cts?.Cancel();
+        btnGrowth.Click += (_, _) => { using var dialog = new GrowthDialog(); dialog.ShowDialog(this); };
         var toolsMenu = new ContextMenuStrip();
         toolsMenu.Items.Add("全盘占用扫描", null, (_, _) =>
         {
@@ -212,12 +215,11 @@ public class MainForm : Form
             dialog.ShowDialog(this);
         });
         toolsMenu.Items.Add("选择项目目录扫描", null, BtnProjectScan_Click);
-        toolsMenu.Items.Add("趋势分析", null, (_, _) => { using var dialog = new GrowthDialog(); dialog.ShowDialog(this); });
         btnTrend.ContextMenuStrip = toolsMenu;
         btnTrend.Click += (_, _) => toolsMenu.Show(btnTrend, new Point(0, btnTrend.Height));
         Disposed += (_, _) => toolsMenu.Dispose();
 
-        foreach (var b in new[] { btnScan, btnClean, btnSelectAll, btnSelectNone, btnCancel, btnTrend })
+        foreach (var b in new[] { btnScan, btnClean, btnSelectAll, btnSelectNone, btnCancel, btnTrend, btnGrowth })
         {
             FitButton(b);
             if (b.Width < 88) b.Width = 88;   // 短文案按钮保底宽度，避免拥挤
@@ -1080,6 +1082,12 @@ public class MainForm : Form
             summary += $"\n\n磁盘可用空间: {CacheScanner.FormatSize(freeBefore)} → {CacheScanner.FormatSize(freeAfter)}" +
                        $"（净增 {CacheScanner.FormatSize(Math.Max(0, freeAfter - freeBefore))}）";
             summary += "\n（文件累计与磁盘差值可能不同：其他程序同时在写入，重启删除的空间在重启后才回收）";
+
+            // 效果闭环：文件统计回收较多但磁盘几乎没变大时，泄漏大概率在本工具规则库之外，
+            // 引导用户用增长诊断定位（2026-11-14 BaiduYunKernel 案例的直接教训）
+            long netGain = freeAfter - freeBefore;
+            if (total.FreedBytes >= 500L * 1024 * 1024 && netGain < total.FreedBytes / 2)
+                summary += "\n\n提示：文件统计回收较多，但磁盘净增有限——增长可能来自规则之外的位置，试试工具栏「增长诊断」定位近期增长点。";
         }
 
         return summary;

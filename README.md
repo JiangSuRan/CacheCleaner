@@ -11,7 +11,7 @@
 [![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](https://github.com/JiangSuRan/CacheCleaner/releases)
 [![License](https://img.shields.io/badge/License-MIT-green)](#-许可证)
 
-[![Rules](https://img.shields.io/badge/%E7%94%9F%E6%95%88%E8%A7%84%E5%88%99-120%E6%9D%A1-teal)](#-核心能力)
+[![Rules](https://img.shields.io/badge/%E7%94%9F%E6%95%88%E8%A7%84%E5%88%99-124%E6%9D%A1-teal)](#-核心能力)
 [![Agents](https://img.shields.io/badge/Agent%E6%94%B6%E5%BD%95-18%E4%B8%AA-blue)](#-agent-收录目录)
 [![Artifacts](https://img.shields.io/badge/%E5%8F%AF%E5%86%8D%E7%94%9F%E4%BA%A7%E7%89%A9-26%E9%A1%B9-orange)](#-核心能力)
 [![Tests](https://img.shields.io/badge/%E5%9B%9E%E5%BD%92%E6%B5%8B%E8%AF%95-391%E9%A1%B9%E9%80%9A%E8%BF%87-success)](tests/Regression/)
@@ -28,20 +28,21 @@
 
 AI agent 与 CLI 的普及，让开发者的磁盘出现了一代传统清理工具完全不认识的新膨胀源：**会话转录**只进不出、**模型权重**动辄数十 GB、**自更新**堆积旧版本、**内容寻址存储**设计上只增不减，每个工具还要在家目录圈一块 dot-home。社区已经大量报障——`~/.claude` 涨到 3.6 GB 的 issue、Cursor「清缓存」误删 300 GB 的事故——一个不懂语义的清理器，要么不敢删，要么删错。
 
-CacheCleaner 的答案是一套**带安全语义的规则引擎**：120 条生效规则覆盖六类位置，三级风险标注、进程守卫、预览模式、全程审计层层兜底，并把收录工作沉淀为可持续维护的 **Agent 收录目录**——**已知全自动，未知看得见**。
+CacheCleaner 的答案是一套**带安全语义的规则引擎**：124 条生效规则覆盖六类位置，三级风险标注、进程守卫、预览模式、全程审计层层兜底，并把收录工作沉淀为可持续维护的 **Agent 收录目录**——**已知全自动，未知看得见**。
 
 ## 🎯 核心能力
 
 | 能力 | 说明 |
 |---|---|
-| 🔍 **三阶段智能扫描** | 秒级扫描 88 条内置规则位置，随后自动遍历用户目录发现未知应用的缓存（支持 `.cache` / `.tmp` / `.logs` 点目录），最后枚举项目工程的可再生产物，并按「目录是否存在」自动显隐 |
+| 🔍 **三阶段智能扫描** | 秒级扫描 92 条内置规则位置，随后自动遍历用户目录发现未知应用的缓存（支持 `.cache` / `.tmp` / `.logs` 点目录），最后枚举项目工程的可再生产物，并按「目录是否存在」自动显隐 |
 | 🛡️ **三级安全防护** | 安全 / 注意 / 危险三级风险标注；路径安全校验 + 系统级精确白名单；`guardProcesses` 进程守卫——浏览器、微信运行中自动跳过对应缓存项并记入日志 |
 | 👁️ **预览模式** | 只统计将释放的量，不删除任何文件、不执行任何命令、不改动服务状态——先看账单，再动手 |
 | 📊 **效果可观测** | 清理汇总以**磁盘可用空间差**为准（拒绝纸面数字）；逐项释放量与失败明细（被占用/权限不足的具体路径）落盘审计日志 |
+| 📈 **增长诊断** | 最近大文件排行 + 24 个固定位置的基线增量对比（与脚本同 JSON），持续 >100 MB/天 标红泄漏点；清理净增远低于统计时自动引导定位规则外占用 |
 | ♻️ **可靠清理管线** | 命令式清理并行读取输出、限时轮询、随时可取消——系统维护进程（DISM 等）保留后台自行结束，绝不误杀；逐项「处理结果」列（成功/失败/跳过/待重启），清理后核实**真实残留大小**，单项失败不中断，任何结束方式都写入审计汇总 |
 | 📈 **增长分析** | 按「最后写入时间」找出最近 3/7/14 天新写入的大文件排行，直接回答「**谁在吃我的盘**」；命中可迁盘的大缓存时给出**迁盘顾问**命令 |
 | 💽 **全盘占用扫描** | 「更多工具」从系统盘根或任意目录统计所有可访问子目录，不限大小与层数；双击逐层下钻、大文件前 100 项、随时取消——只分析占用，不动任何文件 |
-| 🧩 **JSON 规则引擎** | 88 条默认规则内嵌 + Agent 目录编译，放一份 `rules.user.json` 即可增改，**无需重新编译**（对标 Winapp2.ini 的思路） |
+| 🧩 **JSON 规则引擎** | 92 条默认规则内嵌 + Agent 目录编译，放一份 `rules.user.json` 即可增改，**无需重新编译**（对标 Winapp2.ini 的思路） |
 | 🤖 **Agent 收录目录** | 18 个主流 agent 的收录清单（Claude Code / Codex / Gemini CLI / Qwen / OpenCode / Amazon Q / Goose / Crush / 通义灵码 / MarsCode 等），带探测签名、neverTouch 白名单、置信分级与核实日期 |
 | 🗺️ **未收录探测器** | 家目录下未被覆盖的大体积工具目录以「只报告不清理」列出——**已知全自动，未知看得见** |
 | 🖥️ **系统级瘦身** | 回收站、系统还原点（缩减上限保留最新）、WinSxS 组件存储（DISM）、Windows 升级残留（cleanmgr /autoclean）、Windows 更新缓存（自动停启服务） |
@@ -60,6 +61,14 @@ CacheCleaner 的答案是一套**带安全语义的规则引擎**：120 条生�
 6. **全程可审计** —— 每一次扫描与清理：逐项释放量、失败路径、磁盘净增，全部落盘可复盘
 
 ## 🚀 快速开始
+
+### v5.4：覆盖盲区修补与增长诊断打通
+
+- **头号新规则**：百度网盘加速缓存（`BaiduYunKernel\.accelerate`）——实测 6.4 GB、50 天增长 3.7 GB 的头号增长源，纯可再生（P2P/CDN 分块 + 视频预加载），清理后网盘自动重建；网盘运行中自动跳过。此前被旧定性误判为「只能迁盘的用户数据」，本次实测推翻。
+- **用户数据目录可见化**：白名单外命中 `IndexedDB` / `WebStorage` / `aha/users` 等已知数据目录（≥100 MB）时以只读报告展示——飞书 aha（1.0 GB）、Positron WebStorage（1.1 GB）从「隐形」变「可见」，绝不自动清理，也绝不再让人以为「工具没发现」。
+- **Gemini 桌面旧版本**：Squirrel 式 `app-<版本>` 目录按版本号保留最新（实测两个旧版本 750 MB 可回收），logs/Crashpad 与版本号解析失败的目录保守不删。
+- **增长诊断打通**：工具栏直达「增长诊断」，新增「位置增长对比」——24 个关键位置与外部 `growth-baseline.ps1` 脚本共用同一基线 JSON，持续 >100 MB/天 自动标红；清理完成时若「文件统计回收多、磁盘净增少」自动提示去定位规则外泄漏。
+- **软件管家旧安装包**：`chrome.7z` 残留安装包（332 MB，2024-10 后未更新）单文件清理，程序本体不动。
 
 ### v5.3：勾选交互修复与全面扫描升级（对标 BleachBit 规则库）
 
@@ -152,7 +161,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File cleanup\growth-baseline.ps1
 
 ## 🏗️ 工程品质
 
-- 🧪 **回归测试套件** — [`tests/Regression`](tests/Regression/) 零框架依赖：覆盖双管道大量输出、超时与取消、预览零删除、真实删除、最近文件保留、失败后继续、残留大小计量、只读条目 UI 行为，并对 120 条默认规则做全量合法性校验（名称唯一 / 路径 / 清理方式 / 规模基线）；真实删除仅作用于测试自建的随机目录，退出即清理
+- 🧪 **回归测试套件** — [`tests/Regression`](tests/Regression/) 零框架依赖：覆盖双管道大量输出、超时与取消、预览零删除、真实删除、最近文件保留、失败后继续、残留大小计量、只读条目 UI 行为，并对 124 条默认规则做全量合法性校验（名称唯一 / 路径 / 清理方式 / 规模基线）；真实删除仅作用于测试自建的随机目录，退出即清理
 - ⏱️ **性能对照** — [C# 优化与 Rust 只读原型实测](docs/performance/2026-10-15/README.md)：完整扫描中位耗时 10.89s → 6.69s（约 −38.6%），剩余量统计 126ms → 15ms；报告含阶段耗时、原始样本与可复测工具
 - 📦 **自包含单文件** — 一个 exe 内嵌 .NET 10 运行时与全部规则资产，拷贝即用，无需安装任何依赖
 - ✅ **零警告编译** — Release 构建 0 错误 / 0 警告
@@ -191,7 +200,7 @@ ISCC setup.iss
 ├── CleaningRules.cs       # JSON 规则加载器（内嵌默认 + 侧车覆盖 + 目录编译）
 ├── AgentCatalog.cs        # Agent 目录加载与编译器
 ├── ProjectRegistry.cs     # 项目工件注册表加载
-├── rules.default.json     # 内嵌声明式规则（88 条）
+├── rules.default.json     # 内嵌声明式规则（92 条）
 ├── agents.catalog.json    # Agent 收录目录（18 个 agent / 31 条编译条目）
 ├── projects.registry.json # 项目工件注册表（8 类项目 / 26 项可再生产物）
 ├── CleanLog.cs            # 清理审计日志
@@ -224,7 +233,7 @@ ISCC setup.iss
 [![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](https://github.com/JiangSuRan/CacheCleaner/releases)
 [![License](https://img.shields.io/badge/License-MIT-green)](#-license--许可证)
 
-[![Rules](https://img.shields.io/badge/Rules-120-teal)](#-core-capabilities)
+[![Rules](https://img.shields.io/badge/Rules-124-teal)](#-core-capabilities)
 [![Agents](https://img.shields.io/badge/Agents-18-blue)](#-agent-catalog)
 [![Artifacts](https://img.shields.io/badge/Reproducible_artifacts-26-orange)](#-core-capabilities)
 [![Tests](https://img.shields.io/badge/Regression_tests-391_passing-success)](tests/Regression/)
@@ -247,10 +256,11 @@ CacheCleaner's answer is a **semantics-aware rule engine**: 120 effective rules 
 
 | Capability | Description |
 |---|---|
-| 🔍 **Three-phase smart scan** | Scans 88 built-in rule locations in seconds, then walks the user profile to discover caches of unknown apps (supports `.cache` / `.tmp` / `.logs` dot-directories), and finally enumerates reproducible project artifacts — items hide themselves when a path doesn't exist |
+| 🔍 **Three-phase smart scan** | Scans 92 built-in rule locations in seconds, then walks the user profile to discover caches of unknown apps (supports `.cache` / `.tmp` / `.logs` dot-directories), and finally enumerates reproducible project artifacts — items hide themselves when a path doesn't exist |
 | 🛡️ **Three-tier safety** | Safe / caution / danger risk labels; path validation + system-level exact whitelists; per-rule `guardProcesses` — browser and WeChat caches are skipped while those apps run, and every skip is logged |
 | 👁️ **Preview mode** | Only measures what would be freed — deletes no files, runs no commands, touches no service state. See the bill before you pay it |
 | 📊 **Real observability** | Cleanup summaries are based on the **free-space delta** (no paper numbers); per-item freed amounts and failure details (the exact occupied or unauthorized paths) land in audit logs |
+| 📈 **Growth diagnosis** | Recent big-file ranking + baseline diffs over 24 fixed locations (same JSON as the script), auto-flagging leaks above 100 MB/day; when the net disk gain falls far below the statistics, the summary guides you to off-rule growth |
 | ♻️ **Reliable cleanup pipeline** | Command-based cleanups read output in parallel with bounded polling and stay cancellable — system maintenance processes (DISM etc.) keep running in the background, never killed; a per-item **Result** column (success / failed / skipped / reboot pending) with **real leftover sizes** verified after cleaning; one item failing never stops the run; every ending writes an audit summary |
 | 📈 **Growth analysis** | Ranks large files written in the last 3/7/14 days by last-write time — directly answers "**what's eating my disk**"; offers a **migration advisor** command for big relocatable caches |
 | 💽 **Whole-disk usage scan** | "More tools" measures every accessible subdirectory from the system-drive root or any folder — no size or depth caps; double-click to drill down, top-100 largest files, cancellable anytime. Analysis only — it never touches a file |
@@ -273,6 +283,14 @@ CacheCleaner's answer is a **semantics-aware rule engine**: 120 effective rules 
 6. **Everything audited** — every scan and cleanup: per-item freed amounts, failed paths, net disk delta — all on disk for review
 
 ## 🚀 Quick Start
+
+### v5.4: Coverage-gap fixes & growth-diagnosis integration
+
+- **Headline new rule**: Baidu Netdisk acceleration cache (`BaiduYunKernel\.accelerate`) — measured 6.4 GB, the top growth source (+3.7 GB in 50 days). Purely regenerable (P2P/CDN chunks + video preload); the netdisk rebuilds it automatically and skips cleaning while running. This was previously mis-classified as "user data — migrate only"; real inspection overturned that.
+- **User-data directories made visible**: when a whitelisted scan hits known data directories (`IndexedDB` / `WebStorage` / `aha/users`, ≥100 MB) they are now listed as read-only reports — Feishu aha (1.0 GB) and Positron WebStorage (1.1 GB) go from invisible to visible. Never auto-cleaned, and no more "the tool didn't find it".
+- **Gemini desktop old versions**: Squirrel-style `app-<ver>` directories keep the newest by version number (two old versions worth 750 MB reclaimed in testing); logs/Crashpad and unparseable version dirs are conservatively kept.
+- **Growth diagnosis integrated**: a dedicated toolbar button, plus a new "location growth diff" view — 24 key locations sharing the same baseline JSON as the external `growth-baseline.ps1` script, auto-flagged above 100 MB/day; when "statistics say freed a lot but the disk barely grew", the summary points you to the diagnosis.
+- **Software-manager stale installer**: single-file cleanup of the leftover `chrome.7z` (332 MB, untouched since 2024-10); the program binaries stay untouched.
 
 ### v5.3: Checkbox interaction fix & comprehensive scan upgrade (aligned with BleachBit's rule library)
 
@@ -365,7 +383,7 @@ Issues contributing evidence for new agents (with official docs or source links)
 
 ## 🏗️ Engineering Quality
 
-- 🧪 **Regression suite** — [`tests/Regression`](tests/Regression/) with zero framework dependencies: parallel pipes under heavy output, timeout, cancellation, preview deleting nothing, real deletion, recent-file retention, continue-on-failure, leftover-size accounting and read-only UI behavior, plus a full legality validation of all 120 default rules (unique names / paths / clean modes / scale baseline); real deletion only targets random directories the suite creates itself
+- 🧪 **Regression suite** — [`tests/Regression`](tests/Regression/) with zero framework dependencies: parallel pipes under heavy output, timeout, cancellation, preview deleting nothing, real deletion, recent-file retention, continue-on-failure, leftover-size accounting and read-only UI behavior, plus a full legality validation of all 124 rules (unique names / paths / clean modes / scale baseline); real deletion only targets random directories the suite creates itself
 - ⏱️ **Performance comparison** — [C# optimizations vs. a read-only Rust prototype](docs/performance/2026-10-15/README.md): full-scan median 10.89s → 6.69s (≈ −38.6%), leftover measurement 126ms → 15ms; stage timings, raw samples and reproducible tools included
 - 📦 **Self-contained single file** — one exe embeds the .NET 10 runtime and all rule assets; copy and run
 - ✅ **Zero-warning builds** — Release builds with 0 errors / 0 warnings
